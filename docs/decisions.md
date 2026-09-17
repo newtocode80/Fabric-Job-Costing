@@ -211,14 +211,18 @@ module before any implementation existed.
 | 28 | The guardrails are stated in the system prompt, not only enforced. | A rejection costs one of three calls. Telling the model the rules up front means it rarely spends one discovering them; the rejection path is the backstop, not the teacher. |
 | 29 | Guardrails sit in the **tool layer**, not the engine. | `check()` is engine-agnostic, so a `FabricEngine` inherits rules 1-3 unchanged. Only the timeout is engine-specific, because only the engine can cancel its own query. |
 
-### Known gap: an explicit oversized LIMIT is honoured
+### Closed: explicit LIMITs are now clamped
 
-Spec rule 3 is "inject LIMIT 500 if absent", and that is implemented exactly. A query
-that already carries `LIMIT 100000` therefore keeps it and returns all 10,365 rows.
+The owner ruled: any explicit LIMIT above 500 comes down to 500, and the clamp must
+not be silent.
 
-This is a real hole in the row cap, and a reachable one: a model that has just been
-told its result was truncated could plausibly write a large explicit LIMIT to get the
-rest. Clamping any LIMIT above 500 down to 500 is a one-line change to
-`_has_top_level_limit`, but it rewrites a value the model chose deliberately, so it is
-a scope decision for the owner rather than one to make silently. **Not implemented;
-awaiting a ruling.**
+| # | Decision | Why |
+|---|---|---|
+| 30 | The clamp **wraps** the query — `SELECT * FROM (<original>) LIMIT 500` — rather than editing the LIMIT in place or regenerating from the AST. | The model's query survives verbatim inside, so the panel shows both what was asked for and the cap applied, instead of a silently edited number. Verified against ORDER BY (ordering preserved), duplicate column names (auto-renamed), CTEs and trailing comments. |
+| 31 | `check()` now returns a `CheckedQuery` rather than a string. | A clamp has to report the requested limit, the applied limit and a note; a bare string cannot carry that, and returning it out-of-band would invite callers to ignore it. |
+| 32 | **Injection is silent; clamping is not.** | Injecting a limit overrides nothing the model chose. Clamping overrides an explicit instruction, so it always produces a note. |
+| 33 | The clamp note is prepended **ahead of the rows** in the tool result. | A note the model has to scroll past is a note it may act on too late. |
+| 34 | The note's guidance matches the truncation note's word for word in substance. | The wrong recovery is the same in both cases — asking for more rows instead of aggregating — so the instruction should not differ. |
+
+`ToolCall` records `sql` (as written), `executed_sql` (as run) and `clamped_from`, and
+the CLI prints the clamp explicitly rather than showing only the wrapped query.

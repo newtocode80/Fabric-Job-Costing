@@ -40,7 +40,10 @@ def show(answer: Answer) -> None:
         # model's version too, so the panel never misrepresents either one.
         shown = call.executed_sql or call.sql
         print(shown.strip())
-        if call.executed_sql and call.executed_sql.strip() != call.sql.strip():
+        if call.clamped_from:
+            print(f"  [LIMIT {call.clamped_from} clamped to 500 -- the query above "
+                  f"wraps what the model wrote]")
+        elif call.executed_sql and call.executed_sql.strip() != call.sql.strip():
             print(f"  (as written by the model: {call.sql.strip()})")
         print()
         if not call.ok:

@@ -100,6 +100,7 @@ class ToolCall:
     ok: bool
     executed_sql: str | None = None   # what actually ran, after LIMIT injection
     rejected: bool = False            # refused by a guardrail, never reached the engine
+    clamped_from: int | None = None   # the model's LIMIT, if it was capped
     columns: list[str] = field(default_factory=list)
     rows: list[tuple[Any, ...]] = field(default_factory=list)
     error: str | None = None
@@ -206,7 +207,7 @@ class Agent:
     def _execute(self, sql: str) -> tuple[ToolCall, str, bool]:
         """Guard, then run one query. Returns (record, text for the model, is_error)."""
         try:
-            safe_sql = check(sql, self.allowed_tables)
+            checked = check(sql, self.allowed_tables)
         except QueryRejected as exc:
             # A guardrail refused. The reason is written for the model to act on.
             return (
@@ -216,26 +217,31 @@ class Agent:
             )
 
         try:
-            result = self.engine.run(safe_sql)
+            result = self.engine.run(checked.sql)
         except TimeoutError as exc:
             return (
-                ToolCall(sql=sql, ok=False, executed_sql=safe_sql, error=str(exc)),
+                ToolCall(sql=sql, ok=False, executed_sql=checked.sql, error=str(exc)),
                 str(exc),
                 True,
             )
         except Exception as exc:
             message = f"{type(exc).__name__}: {exc}"
             return (
-                ToolCall(sql=sql, ok=False, executed_sql=safe_sql, error=message),
+                ToolCall(sql=sql, ok=False, executed_sql=checked.sql, error=message),
                 f"The query failed.\n{message}\nFix the SQL and try again.",
                 True,
             )
         text, truncated = _render(result)
+        # A clamp overrode something the model asked for, so it is told, ahead of
+        # the rows -- the note must not be something it has to scroll past.
+        if checked.note:
+            text = f"{checked.note}\n\n{text}"
         return (
             ToolCall(
                 sql=sql,
                 ok=True,
-                executed_sql=safe_sql,
+                executed_sql=checked.sql,
+                clamped_from=checked.limit_clamped_from,
                 columns=result.columns,
                 rows=result.rows,
                 truncated=truncated,

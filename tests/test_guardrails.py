@@ -182,27 +182,31 @@ def test_table_names_are_matched_case_insensitively(allowed):
 # ----------------------------------------------------------- rule 3: LIMIT 500
 
 def test_limit_is_injected_when_absent(allowed):
-    assert f"LIMIT {DEFAULT_ROW_LIMIT}" in check("SELECT * FROM dim_job", allowed).upper()
+    checked = check("SELECT * FROM dim_job", allowed)
+    assert checked.limit_injected is True
+    assert f"LIMIT {DEFAULT_ROW_LIMIT}" in checked.sql.upper()
 
 
 def test_an_existing_smaller_limit_is_left_alone(allowed):
-    out = check("SELECT * FROM dim_job LIMIT 10", allowed).upper()
-    assert "LIMIT 10" in out and f"LIMIT {DEFAULT_ROW_LIMIT}" not in out
+    checked = check("SELECT * FROM dim_job LIMIT 10", allowed)
+    assert checked.limit_injected is False and checked.rewritten is False
+    assert checked.sql.upper().endswith("LIMIT 10")
 
 
 def test_a_limit_inside_a_cte_does_not_count_as_the_outer_limit(allowed):
-    out = check("WITH j AS (SELECT * FROM dim_job LIMIT 5) SELECT * FROM j", allowed).upper()
-    assert f"LIMIT {DEFAULT_ROW_LIMIT}" in out
+    checked = check("WITH j AS (SELECT * FROM dim_job LIMIT 5) SELECT * FROM j", allowed)
+    assert checked.limit_injected is True
+    assert f"LIMIT {DEFAULT_ROW_LIMIT}" in checked.sql.upper()
 
 
 def test_the_injected_query_still_runs_and_is_capped(allowed, engine):
-    sql = check("SELECT CostID FROM fact_job_cost", allowed)
-    assert engine.run(sql).row_count == DEFAULT_ROW_LIMIT
+    checked = check("SELECT CostID FROM fact_job_cost", allowed)
+    assert engine.run(checked.sql).row_count == DEFAULT_ROW_LIMIT
 
 
 def test_injection_does_not_change_the_answer_of_a_small_query(allowed, engine):
-    sql = check("SELECT count(*) FROM dim_job", allowed)
-    assert engine.run(sql).rows == [(52,)]
+    checked = check("SELECT count(*) FROM dim_job", allowed)
+    assert engine.run(checked.sql).rows == [(52,)]
 
 
 # --------------------------------------------------------- rule 4: 10s timeout
@@ -243,3 +247,62 @@ def test_every_rejection_carries_an_actionable_reason(sql, allowed):
     reason = reject(sql, allowed)
     assert len(reason) > 40, "a reason the model can act on, not a bare code"
     assert reason[0].isupper() and reason.rstrip().endswith("."), "a full sentence"
+
+
+# --------------------------------------- rule 3b: an explicit LIMIT is clamped
+
+def test_a_limit_above_the_cap_is_clamped(allowed, engine):
+    checked = check("SELECT CostID FROM fact_job_cost LIMIT 100000", allowed)
+    assert checked.limit_clamped_from == 100000
+    assert checked.limit_injected is False
+    assert engine.run(checked.sql).row_count == DEFAULT_ROW_LIMIT
+
+
+@pytest.mark.parametrize("limit", [1, 10, 499, DEFAULT_ROW_LIMIT])
+def test_a_limit_at_or_below_the_cap_is_untouched(limit, allowed):
+    checked = check(f"SELECT CostID FROM fact_job_cost LIMIT {limit}", allowed)
+    assert checked.limit_clamped_from is None
+    assert checked.sql == f"SELECT CostID FROM fact_job_cost LIMIT {limit}"
+    assert checked.note is None
+
+
+def test_one_over_the_cap_is_clamped(allowed):
+    assert check(
+        f"SELECT CostID FROM fact_job_cost LIMIT {DEFAULT_ROW_LIMIT + 1}", allowed
+    ).limit_clamped_from == DEFAULT_ROW_LIMIT + 1
+
+
+def test_a_clamped_limit_with_offset_is_still_clamped(allowed, engine):
+    checked = check("SELECT CostID FROM fact_job_cost LIMIT 9000 OFFSET 10", allowed)
+    assert checked.limit_clamped_from == 9000
+    assert engine.run(checked.sql).row_count == DEFAULT_ROW_LIMIT
+
+
+def test_the_clamp_preserves_the_models_own_sql_verbatim(allowed):
+    written = "SELECT CostID FROM fact_job_cost ORDER BY CostID DESC LIMIT 100000"
+    checked = check(written, allowed)
+    assert written in checked.sql          # the original text is still there to read
+    assert checked.sql != written          # ... but it is visibly wrapped
+    assert checked.original_sql == written
+
+
+def test_a_clamped_query_keeps_its_ordering(allowed, engine):
+    checked = check("SELECT CostID FROM fact_job_cost ORDER BY CostID DESC LIMIT 99999", allowed)
+    top = engine.run(checked.sql).rows[0][0]
+    assert top == engine.run("SELECT max(CostID) FROM fact_job_cost").rows[0][0]
+
+
+def test_the_clamp_is_never_silent(allowed):
+    note = check("SELECT CostID FROM fact_job_cost LIMIT 100000", allowed).note
+    assert note, "a clamp must produce a note"
+    assert "100000" in note                       # what was requested
+    assert str(DEFAULT_ROW_LIMIT) in note         # what was applied
+    assert "aggregate" in note                    # the right recovery, as in truncation
+    assert "Do NOT" in note                       # ... and the wrong one, ruled out
+    assert "OFFSET" in note
+
+
+def test_injection_is_reported_separately_from_clamping(allowed):
+    injected = check("SELECT CostID FROM fact_job_cost", allowed)
+    assert injected.limit_injected is True and injected.limit_clamped_from is None
+    assert injected.note is None                  # nothing was overridden, nothing to say

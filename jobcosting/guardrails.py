@@ -6,7 +6,10 @@ Five rules, from the build spec:
      keywords in the string. A blocklist regex both over- and under-rejects: it
      refuses `SELECT 'DROP TABLE x'` and admits `/* SELECT */ DROP TABLE x`.
   2. Only the tables declared in model.yaml may be referenced.
-  3. LIMIT 500 is added when the statement has none at the top level.
+  3. LIMIT 500 is added when the statement has none at the top level, and any
+     explicit limit above 500 is clamped down to it. A clamp is never silent: it
+     produces a note telling the model what it asked for, what it got, and to
+     aggregate rather than try again for more rows.
   4. Queries are killed after 10 seconds (enforced by the engine, not here).
   5. Every rejection raises QueryRejected carrying a sentence the model can act
      on -- what was wrong and what to do instead.
@@ -18,6 +21,7 @@ wrote rather than a reformatted version of it.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import sqlglot
@@ -36,6 +40,43 @@ QUERY_NODES = (exp.Select, exp.Union, exp.Intersect, exp.Except)
 
 class QueryRejected(Exception):
     """A query a guardrail refused. The message is written for the model to read."""
+
+
+@dataclass(frozen=True)
+class CheckedQuery:
+    """A query that passed the guardrails, and what they changed on the way."""
+
+    sql: str                              # what to execute
+    original_sql: str                     # exactly what the model wrote
+    limit_injected: bool = False          # had no limit; LIMIT 500 added
+    limit_clamped_from: int | None = None # had a bigger limit; capped at 500
+    row_limit: int = DEFAULT_ROW_LIMIT
+
+    @property
+    def rewritten(self) -> bool:
+        return self.sql != self.original_sql
+
+    @property
+    def note(self) -> str | None:
+        """What to tell the model. Only a clamp needs saying.
+
+        Injecting a limit overrides nothing the model chose, so it is silent.
+        Clamping overrides an explicit instruction, so it never is -- and the
+        guidance matches the truncation note, because the wrong recovery is the
+        same one: asking for more rows instead of aggregating.
+        """
+        if self.limit_clamped_from is None:
+            return None
+        return (
+            f"Your LIMIT of {self.limit_clamped_from} was reduced to "
+            f"{self.row_limit}, the most this tool will return. You are seeing "
+            f"{self.row_limit} rows, not {self.limit_clamped_from}. Do NOT raise "
+            f"the LIMIT again or page with OFFSET -- the cap applies to every "
+            f"query, so a call spent that way is wasted. If you need a figure "
+            f"over all the matching rows, compute it in SQL with an aggregate. "
+            f"If you need particular rows, narrow the WHERE clause or use ORDER "
+            f"BY so the rows you want come back first."
+        )
 
 
 def load_allowed_tables(model_path: Path = MODEL_PATH) -> frozenset[str]:
@@ -100,17 +141,29 @@ def _check_tables(statement: exp.Expression, allowed: frozenset[str]) -> None:
             )
 
 
-def _has_top_level_limit(statement: exp.Expression) -> bool:
-    """A LIMIT inside a CTE or subquery does not bound the result the caller gets."""
-    return statement.args.get("limit") is not None
+def _top_level_limit(statement: exp.Expression) -> int | None:
+    """The statement's own LIMIT, if it has one and it is a plain number.
+
+    A LIMIT inside a CTE or subquery does not bound the result the caller gets, so
+    only the top-level node is consulted.
+    """
+    limit = statement.args.get("limit")
+    if limit is None:
+        return None
+    try:
+        return int(limit.expression.name)
+    except (AttributeError, ValueError):
+        # A non-literal limit (an expression or a parameter). Treat it as present
+        # but unknown, and let the wrapper below cap it anyway.
+        return -1
 
 
 def check(
     sql: str,
     allowed: frozenset[str] | None = None,
     row_limit: int = DEFAULT_ROW_LIMIT,
-) -> str:
-    """Validate `sql` and return the text to execute.
+) -> CheckedQuery:
+    """Validate `sql` and return what to execute, plus what was changed.
 
     Raises QueryRejected, with a reason for the model, if any guardrail refuses.
     """
@@ -154,10 +207,29 @@ def check(
 
     _check_tables(statement, allowed)
 
-    if _has_top_level_limit(statement):
-        return sql
+    trimmed = sql.rstrip().rstrip(";")
+    existing = _top_level_limit(statement)
 
-    # Append rather than regenerate from the AST, so the SQL panel shows the
-    # model's own formatting. Safe: the statement has already been proven to be a
-    # single query, so there is nothing after it for the LIMIT to land inside.
-    return f"{sql.rstrip().rstrip(';')}\nLIMIT {row_limit}"
+    if existing is None:
+        # Append rather than regenerate from the AST, so the SQL panel shows the
+        # model's own formatting. Safe: the statement is already proven to be a
+        # single query, so there is nothing after it for the LIMIT to land inside.
+        return CheckedQuery(
+            sql=f"{trimmed}\nLIMIT {row_limit}",
+            original_sql=sql,
+            limit_injected=True,
+            row_limit=row_limit,
+        )
+
+    if 0 <= existing <= row_limit:
+        return CheckedQuery(sql=sql, original_sql=sql, row_limit=row_limit)
+
+    # Over the cap. Wrap rather than rewrite the LIMIT in place: the model's query
+    # survives verbatim inside, so the panel shows both what was asked for and the
+    # cap that was applied, instead of a silently edited number.
+    return CheckedQuery(
+        sql=f"SELECT * FROM (\n{trimmed}\n) LIMIT {row_limit}",
+        original_sql=sql,
+        limit_clamped_from=existing,
+        row_limit=row_limit,
+    )

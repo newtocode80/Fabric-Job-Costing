@@ -196,3 +196,24 @@ def test_money_is_rounded_when_the_documented_cast_is_used(engine):
     ).rows[0][0]
     assert str(raw) == "7684852.81000002"
     assert str(cast) == "7684852.81"
+
+
+def test_a_clamped_limit_reaches_the_model_as_a_note_and_is_recorded(engine):
+    written = "SELECT CostID FROM fact_job_cost LIMIT 100000"
+    agent = make(engine, [
+        ([tool_block(written)], "tool_use"),
+        ([text_block("done")], "end_turn"),
+    ])
+    out = agent.ask("give me every cost id")
+    call = out.tool_calls[0]
+
+    # Both SQLs recorded: the panel can show the clamp rather than hide it.
+    assert call.sql == written
+    assert call.executed_sql != written and written in call.executed_sql
+    assert call.clamped_from == 100000
+    assert len(call.rows) == 500
+
+    # The note is the FIRST thing in the tool result, ahead of the rows.
+    content = agent.client.requests[1]["messages"][2]["content"][0]["content"]
+    assert content.startswith("Your LIMIT of 100000 was reduced to 500")
+    assert "aggregate" in content and "Do NOT" in content
