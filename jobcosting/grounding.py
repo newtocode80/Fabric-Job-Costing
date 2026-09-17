@@ -36,6 +36,7 @@ from typing import Any, Iterable, Sequence
 import yaml
 
 MODEL_PATH = Path(__file__).resolve().parents[1] / "model" / "model.yaml"
+SCHEMA_CONTEXT_PATH = Path(__file__).resolve().parents[1] / "model" / "schema_context.md"
 
 # 1,234 | 1234.5 | $4,497,901.88 | 45% | -12
 #
@@ -64,12 +65,32 @@ SCALES = (Decimal(1), Decimal(1_000), Decimal(1_000_000), Decimal(1_000_000_000)
 
 @dataclass
 class Grounding:
+    """What the prose claimed, and which of it the data does not support.
+
+    Flagged numbers carry a severity, because two different things get caught:
+
+      FAIL  -- the number appears nowhere. Nothing in the data or the prompt says
+               it. "15-39 days late" when no job is 39 days late.
+      WARN  -- the number is printed verbatim in the system prompt but is not in
+               this result. "across all 52 jobs" is true and the model read it
+               there; "52 total minus the 8 above = 44 assessable" is the failure
+               this check exists for. Both look identical to a checker, so the
+               conservative call is to surface it and let a person decide.
+    """
+
     numbers: list[Decimal] = field(default_factory=list)
     ungrounded: list[Decimal] = field(default_factory=list)
+    warnings: list[Decimal] = field(default_factory=list)
+
+    @property
+    def failures(self) -> list[Decimal]:
+        warned = set(self.warnings)
+        return [n for n in self.ungrounded if n not in warned]
 
     @property
     def ok(self) -> bool:
-        return not self.ungrounded
+        """True when nothing is unaccounted for. Warnings do not fail a case."""
+        return not self.failures
 
     @property
     def grounded(self) -> list[Decimal]:
@@ -79,10 +100,16 @@ class Grounding:
     def summary(self) -> str:
         if not self.numbers:
             return "no numbers stated"
-        if self.ok:
+        if not self.ungrounded:
             return f"all {len(self.numbers)} numbers grounded"
-        listed = ", ".join(_plain(n) for n in self.ungrounded)
-        return f"{len(self.ungrounded)} of {len(self.numbers)} not in the result: {listed}"
+        parts = []
+        if self.failures:
+            parts.append(f"{len(self.failures)} of {len(self.numbers)} in neither the "
+                         f"result nor the prompt: {', '.join(_plain(n) for n in self.failures)}")
+        if self.warnings:
+            parts.append(f"{len(self.warnings)} from the prompt, not this result: "
+                         f"{', '.join(_plain(n) for n in self.warnings)}")
+        return "; ".join(parts)
 
 
 # Permissive on purpose: this reads declarations, not prose. "(53-71)" must yield
@@ -100,6 +127,27 @@ def _walk(node: Any):
             yield from _walk(value)
     else:
         yield node
+
+
+@functools.lru_cache(maxsize=4)
+def prompt_figures(path: Path = SCHEMA_CONTEXT_PATH) -> frozenset[Decimal]:
+    """Every figure printed in the rendered system prompt.
+
+    Used ONLY to grade severity, never to ground. Widening the supported set to
+    everything the prompt prints would ground the 52 in "52 total minus the 8 above
+    = 44 assessable" and let that failure through, which is the whole point of the
+    check. Seeing the number is not the same as being entitled to compute with it.
+    """
+    try:
+        text = Path(path).read_text()
+    except OSError:
+        return frozenset()
+    found: set[Decimal] = set()
+    for token in DECLARED_NUMBER.findall(text):
+        value = _to_decimal(token)
+        if value is not None:
+            found.add(value)
+    return frozenset(found)
 
 
 @functools.lru_cache(maxsize=4)
@@ -258,6 +306,7 @@ def check_answer(
     tool_calls: Sequence[Any],
     question: str = "",
     declared: Iterable[Decimal] | None = None,
+    seen_in_prompt: Iterable[Decimal] | None = None,
 ) -> Grounding:
     """Find numbers in `answer` that neither the results nor the model declare."""
     cells: set[Decimal] = set()
@@ -293,4 +342,6 @@ def check_answer(
         for number in stated
         if not _matches(number, supported) and not _matches(number, ratios)
     ]
-    return Grounding(numbers=stated, ungrounded=ungrounded)
+    printed = set(prompt_figures() if seen_in_prompt is None else seen_in_prompt)
+    warnings = [number for number in ungrounded if number in printed]
+    return Grounding(numbers=stated, ungrounded=ungrounded, warnings=warnings)

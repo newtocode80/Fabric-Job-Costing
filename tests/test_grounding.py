@@ -22,10 +22,28 @@ def test_extracts_numbers_in_every_form_the_prose_uses():
 def test_the_observed_failure_is_caught():
     """33 late jobs came back; "33 of 44" invents the 44."""
     late = call(["JobNumber"], [(f"J-2025{i:02d}",) for i in range(33)])
-    result = check_answer("33 of 44 jobs finished late.", [late])
+    result = check_answer("33 of 44 jobs finished late.", [late],
+                          seen_in_prompt=frozenset())
     assert not result.ok
-    assert result.ungrounded == [Decimal("44")]
+    assert result.failures == [Decimal("44")]
     assert "44" in result.summary()
+
+
+def test_a_denominator_that_collides_with_a_prompt_figure_only_warns():
+    """A known softening of the canonical case, recorded rather than hidden.
+
+    The real prompt prints "keeps 44 of 52 jobs" about a completely different 44.
+    Severity is decided by whether the figure appears in the prompt at all, so this
+    collision downgrades the canonical failure to a warning. It is still surfaced;
+    it no longer fails the case on its own. Small integers collide easily -- that is
+    the cost of grading severity this way.
+    """
+    late = call(["JobNumber"], [(f"J-2025{i:02d}",) for i in range(33)])
+    result = check_answer("33 of 44 jobs finished late.", [late],
+                          seen_in_prompt=frozenset({Decimal("44")}))
+    assert result.ungrounded == [Decimal("44")]     # still flagged
+    assert result.warnings == [Decimal("44")]       # ... as a warning
+    assert result.ok                                 # ... which does not fail alone
 
 
 def test_the_same_answer_without_the_invented_denominator_passes():

@@ -49,6 +49,7 @@ class CaseResult:
     category: str
     passed: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
+    warned: list[str] = field(default_factory=list)
     error: str | None = None
     tool_calls: int = 0
 
@@ -89,8 +90,17 @@ def evaluate(case: dict, answer: Answer, engine: DuckDBEngine) -> CaseResult:
         return result
 
     # --- universal: every number in the prose must come from the data ---------
+    # A number printed in the prompt but absent from this result is a WARNING, not
+    # a failure: the model may be quoting context it was given. A number that is in
+    # neither is a failure. The checker cannot tell quoting from computing, so it
+    # over-flags deliberately -- see the README.
     grounding = check_answer(answer.answer or "", answer.tool_calls, case["question"])
     result.check("numbers grounded", grounding.ok, grounding.summary())
+    if grounding.warnings:
+        result.warned.append(
+            f"numbers from the prompt, not this result: "
+            f"{', '.join(format(n.normalize(), 'f') for n in grounding.warnings)}"
+        )
 
     # --- budget -------------------------------------------------------------
     limit = case.get("max_tool_calls")
@@ -215,13 +225,20 @@ def print_table(results: list[CaseResult]) -> None:
     print("-" * (width + 60))
     for r in results:
         verdict = "ERROR" if r.error else ("pass" if r.ok else "FAIL")
+        if r.ok and r.warned and not r.error:
+            verdict = "warn"
         detail = r.error if r.error else f"{len(r.passed)}/{len(r.passed) + len(r.failed)}"
         print(f"{r.id:<{width}}  {r.category:<17} {r.tool_calls:>5}  {verdict:<6}  {detail}")
         for failure in r.failed:
             print(f"{'':<{width}}  {'':<17} {'':>5}          x {failure}")
+        for warning in r.warned:
+            print(f"{'':<{width}}  {'':<17} {'':>5}          ! {warning}")
     print("-" * (width + 60))
     passed = sum(1 for r in results if r.ok)
-    print(f"{passed}/{len(results)} passed")
+    warned = sum(1 for r in results if r.ok and r.warned)
+    tail = f" ({warned} with warnings)" if warned else ""
+    print(f"{passed}/{len(results)} passed{tail}")
+    print("x = failed check    ! = number printed in the prompt but not in this result")
 
 
 def main() -> int:

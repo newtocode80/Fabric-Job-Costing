@@ -415,3 +415,17 @@ model never sees. The eval asserted a behaviour the prompt never asked for.
 `model.yaml` now declares `gross_margin_by_job`: the calculation, its SQL, and three
 `required_caveats` the renderer prints as "The answer must state all of these." The
 eval checks those caveats instead of a refusal. Prompt and eval now agree.
+
+## Severity on the grounding check
+
+Owner's ruling: do not widen the supported set to every prompt figure. Grade
+severity instead.
+
+| # | Decision | Why |
+|---|---|---|
+| 57 | A flagged number printed verbatim in the rendered prompt is a **WARN**; one that appears nowhere is a **FAIL**. Warnings do not fail a case. | The model may be quoting context it was given. A checker cannot tell quoting from computing -- the two are identical in the text -- so it surfaces both and lets a person judge. |
+| 58 | `prompt_figures()` reads `schema_context.md` and is used **only** for severity, never for grounding. | Grounding prompt figures would ground the 52 in "52 total minus the 8 above = 44 assessable" and let that failure through silently. Seeing a number is not being entitled to compute with it. |
+| 59 | The collision it introduces is recorded in a test rather than hidden. | The real prompt prints "keeps 44 of 52 jobs" about an unrelated 44, which downgrades the canonical "33 of 44" case to a warning. Small integers collide. That is the price of grading severity this way, and it is written down. |
+
+The README explains the line, because the conservatism is a design choice a reader
+would otherwise mistake for a bug.

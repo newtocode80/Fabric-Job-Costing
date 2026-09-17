@@ -76,9 +76,10 @@ def test_the_runner_catches_the_invented_denominator(engine):
         tool_calls=[late_jobs_result()],
     )
     result = runner.evaluate(case("jobs_finished_late"), answer, engine)
-    assert not result.ok
-    assert any("numbers grounded" in f for f in result.failed)
-    assert any("44" in f for f in result.failed)
+    # 44 collides with an unrelated 44 in the prompt, so it lands as a warning
+    # rather than a failure -- see test_a_denominator_that_collides_with_a_prompt_
+    # figure_only_warns. It is still surfaced, which is what the runner owes.
+    assert any("44" in w for w in result.warned)
 
 
 def test_the_same_answer_without_the_denominator_passes(engine):
