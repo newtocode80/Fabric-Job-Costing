@@ -242,6 +242,34 @@ ORDER BY variance DESC
 - LEFT JOIN to dim_job, not INNER: 14 of those 17 JobKeys do not exist in dim_job (DQ2), and an inner join would hide 16,882.98 of real cost.
 - Totals across the whole result double-count nothing, but filtering to one side of the FULL OUTER JOIN reintroduces the omissions above.
 
+### gross_margin_by_job
+Applies to: which jobs were most profitable, profit by job, margin by job, which jobs made money.
+
+**There is no revenue in this model. The closest defensible measure is CONTRACT VALUE LESS ACTUAL COST, and it must be named as that rather than called profit or revenue. Aggregate cost to JobKey first and then join dim_job; the budget_vs_actual caution about fanning two facts together applies here too.**
+
+```sql
+WITH actual AS (
+    SELECT JobKey, sum(CostAmount) AS cost
+    FROM fact_job_cost GROUP BY 1
+)
+SELECT
+    j.JobNumber,
+    j.JobName,
+    j.Status,
+    CAST(j.ContractValue AS DECIMAL(18,2))                       AS contract_value,
+    CAST(coalesce(a.cost, 0) AS DECIMAL(18,2))                   AS actual_cost,
+    CAST(j.ContractValue - coalesce(a.cost, 0) AS DECIMAL(18,2)) AS gross_margin
+FROM dim_job j
+LEFT JOIN actual a ON a.JobKey = j.JobKey
+ORDER BY gross_margin DESC
+```
+
+**The answer must state all of these. They are not optional:**
+- State that the figure is contract value less actual cost, and that it is NOT recognised revenue. This model holds no revenue, no invoices and no billing.
+- State that it is unreliable for jobs with Status = 'Active', where the full contract value sits against only the cost incurred so far and flatters the margin. 4 of the 52 jobs are Active.
+- State that approved change orders alter the contract value. dim_change_order holds 7 approved change orders worth 71,676.06 that ContractValue does not include, so the margin is understated for the jobs they belong to.
+- It excludes overhead as well: fact_job_cost holds direct job costs only.
+
 ## Questions this data cannot answer
 
 ### cost by region, which region is most profitable, revenue or margin by region, compare regions

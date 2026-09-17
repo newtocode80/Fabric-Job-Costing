@@ -83,7 +83,9 @@ cases:
     behaviour: answer
     max_tool_calls: 1
     sql_references: [fact_job_cost, dim_job]
-    expect_rows: {min: 1, max: 11}
+    # 11 named clients plus a bucket for the DQ2 orphan JobKeys, which the prompt
+    # declares and the answer is right to surface rather than silently drop.
+    expect_rows: {min: 1, max: 12}
     expect_value_sql: >
       SELECT CAST(sum(c.CostAmount) AS DECIMAL(18,2)) AS total
       FROM fact_job_cost c JOIN dim_job j ON j.JobKey = c.JobKey
@@ -95,10 +97,10 @@ cases:
     behaviour: answer
     max_tool_calls: 1
     sql_references: [fact_job_cost, dim_employee]
-    expect_rows: {min: 1, max: 5}
-    expect_value_sql: >
-      SELECT CAST(sum(Hours) AS DECIMAL(18,2)) FROM fact_job_cost
-      WHERE Hours IS NOT NULL
+    # 5 trades plus an unlinked bucket: 40 Labour rows carry no EmployeeKey, which
+    # the prompt declares. No expect_value_sql: the question asks for a breakdown by
+    # trade and nothing in the prompt obliges the answer to state a grand total.
+    expect_rows: {min: 1, max: 6}
 
   - id: cost_by_job_type
     category: join
@@ -115,7 +117,8 @@ cases:
     category: time_comparison
     question: How did our costs in the most recent quarter compare with the quarter before?
     behaviour: answer
-    max_tool_calls: 2
+    # The prompt's budget is 3. Expecting 2 encoded a limit the prompt never stated.
+    max_tool_calls: 3
     sql_references: [fact_job_cost]
     expect_rows: {min: 1, max: 12}
     mentions: [quarter]
@@ -169,13 +172,17 @@ cases:
     # Region lives only on dim_employee and describes the employee, not the job.
 
   - id: profit_by_job
-    category: refusal
+    category: required_pattern
     question: Which jobs were the most profitable?
-    behaviour: refuse
-    max_tool_calls: 1
-    states_no_money: true
-    # There is no revenue anywhere in this model -- only contract value, budget and
-    # cost. Profit cannot be computed, and ContractValue is not revenue recognised.
+    behaviour: answer
+    max_tool_calls: 2
+    sql_references: [dim_job, fact_job_cost]
+    expect_rows: {min: 1, max: 52}
+    # Not a refusal. Contract value less actual cost is a defensible gross margin on
+    # a fixed-price job; the earlier expectation was wrong. What the answer owes is
+    # the caveats, and model.yaml now declares the calculation and its limits so the
+    # prompt asks for exactly what is checked here.
+    mentions: [contract value, revenue, active, change order]
 
   # --------------------------------------------------------------- ambiguous
 
@@ -184,5 +191,8 @@ cases:
     question: Show me our biggest jobs.
     behaviour: clarify
     max_tool_calls: 1
+    # Either it asks or it answers. A clarifying turn does not also deliver the
+    # answer, so it states no money figures.
+    states_no_money: true
     # "Biggest" could mean contract value, total cost, budget, or duration, and the
     # four give different orderings. The model should ask which is meant.

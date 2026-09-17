@@ -362,3 +362,56 @@ Two process notes, both mine:
 `evals/last-run.json` is **no longer gitignored.** Ignoring it contradicted the one
 thing it is for: re-scoring a run in a different session without spending fifteen
 more model calls. It is output, but it has to be shareable.
+
+## Replaying the first real run: 4/15 -> 10/15
+
+Most failures were the checker, not the model. Categorised from the actual answers:
+
+| Class | Example | Verdict |
+|---|---|---|
+| List markers | `8. J-202551 - $232,248` contributed an 8 | checker bug |
+| Rounded for readability | prose `$520,803`, cell `520802.87` | checker bug |
+| Subset of a column | `94%` = three of four percentages | checker bug |
+| Negative restated as magnitude | cell `-27857.16`, prose "over by $27,857" | checker bug |
+| Unicode minus | prose `−$549,091.45` (U+2212) | checker bug |
+| Date components | "September 24, 2026" from a `date` cell | checker bug |
+| Figures the prompt scripts | "4,637 of 10,365" — the refusal text says to state these | checker bug |
+| **Arithmetic on prompt figures** | "52 total minus the 8 above = 44 assessable" | **genuine** |
+| **Invented band edge** | "15-39 days" — no job is 39 days late | **genuine** |
+| **Answered while clarifying** | 20 jobs with figures, then a question | **genuine** |
+
+Matching now happens **at the precision the prose uses**, which subsumes the old
+ad-hoc rounding cases. Subset sums are capped at 12 values: over a 33-row column
+they manufactured coincidences that grounded both 39 and 52, which were invented.
+That cap was added after the check passed a case it exists to catch.
+
+`cannot_answer` figures joined `data_quality` as a declared source. That is not a
+judgement call: the refusal script *instructs* the model to state "4,637 of 10,365".
+Table row counts stay out, which is what keeps the 52 arithmetic chain a failure.
+
+## Eval expectations that encoded rules the prompt never stated
+
+The owner's structural note, applied to all 15. Four were wrong expectations:
+
+| Case | Expectation | Why it was wrong |
+|---|---|---|
+| `cost_by_client` | at most 11 rows | The 12th is the DQ2 orphan bucket. The prompt declares it; surfacing it is correct. |
+| `labour_hours_by_trade` | at most 5 rows | The 6th is the 40 Labour rows with no EmployeeKey, also declared. |
+| `labour_hours_by_trade` | must state the grand total | The question asks for a breakdown by trade. Nothing obliges a total. |
+| `cost_quarter_over_quarter` | at most 2 tool calls | The prompt grants 3. |
+| `profit_by_job` | refuse | See below. |
+
+## profit_by_job: the expectation was wrong, not the answer
+
+Region had a `cannot_answer` entry; profit had nothing. The only occurrence of
+"profit", "revenue" or "margin" in the whole prompt was inside region's question
+shapes. The model saw a money column that reads like a price, a cost fact, and no
+instruction to decline -- so it computed contract value less cost, which is a
+defensible gross margin on a fixed-price job. 27 of its 36 numbers grounded.
+
+The reasoning for the refusal lived in a **comment in `questions.yaml`**, which the
+model never sees. The eval asserted a behaviour the prompt never asked for.
+
+`model.yaml` now declares `gross_margin_by_job`: the calculation, its SQL, and three
+`required_caveats` the renderer prints as "The answer must state all of these." The
+eval checks those caveats instead of a refusal. Prompt and eval now agree.

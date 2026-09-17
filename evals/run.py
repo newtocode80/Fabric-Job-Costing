@@ -107,8 +107,9 @@ def evaluate(case: dict, answer: Answer, engine: DuckDBEngine) -> CaseResult:
                      "")
     elif behaviour == "clarify":
         result.check("asks a question", "?" in (answer.answer or ""), "no question asked")
-        result.check("does not guess", not grounding.numbers or grounding.ok,
-                     "stated figures while asking")
+        # Groundedness is the wrong test here: a fully-correct answer that also
+        # asks a question grounds perfectly and is still the wrong behaviour.
+        # states_no_money carries this now, declared on the case.
     else:
         result.check("answers", bool(prose.strip()), "empty answer")
         result.check("ran a query", result.tool_calls >= 1, "no SQL run")

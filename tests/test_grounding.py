@@ -143,11 +143,16 @@ def test_a_full_data_quality_caveat_passes():
     assert check_answer(answer, [rows]).ok
 
 
-def test_table_row_counts_are_not_declared_figures():
-    """The boundary: a known issue is quoted as a caveat, a row count is computed with."""
+def test_the_declared_boundary_is_where_the_prompt_tells_it_to_speak():
+    """A figure the prompt instructs the model to state is declared; a bare row
+    count it is merely told exists is not."""
     declared = declared_figures()
-    assert Decimal("52") not in declared      # dim_job rows
-    assert Decimal("10365") not in declared   # fact_job_cost rows
+    # cannot_answer scripts the refusal: "covers only 4,637 of the 10,365 cost rows".
+    assert Decimal("4637") in declared
+    assert Decimal("10365") in declared
+    # dim_job's row count is only a table fact. Computing with it is the failure
+    # this check exists for: "52 total minus the 8 above = 44 assessable".
+    assert Decimal("52") not in declared
 
 
 def test_the_original_invented_denominator_still_fails():
@@ -205,3 +210,43 @@ def test_a_numbered_list_of_real_figures_still_reports_the_figures():
     rows = call(["JobNumber", "over"], [("J-202551", Decimal("232248.41"))])
     answer = "Jobs over budget:\n1. J-202551 is $232,248.41 over budget."
     assert check_answer(answer, [rows]).ok
+
+
+def test_a_long_column_does_not_manufacture_coincidences():
+    """Pairwise sums over 33 durations grounded 39 and 52, both invented."""
+    durations = [2, 3, 15, 16, 17, 20, 22, 24, 25, 27, 28, 29, 33, 34, 37, 40, 41, 42, 43, 44]
+    rows = call(["JobNumber", "days_late"],
+                [(f"J-2025{i:02d}", d) for i, d in enumerate(durations)])
+    got = check_answer("Overruns ranged from 15 to 39 days across 52 assessable jobs.", [rows])
+    assert Decimal("39") in got.ungrounded
+    assert Decimal("52") in got.ungrounded
+
+
+def test_a_short_column_still_supports_a_subset_sum():
+    """Three of four percentages add to 94; that follows directly from the rows."""
+    rows = call(["CostType", "pct"], [
+        ("Material", Decimal("58.53")), ("Labour", Decimal("22.32")),
+        ("Subcontractor", Decimal("13.18")), ("Equipment", Decimal("5.97")),
+    ])
+    assert check_answer("Direct costs account for roughly 94% of all spending.", [rows]).ok
+
+
+def test_a_figure_rounded_for_readability_is_grounded():
+    rows = call(["JobNumber", "cost"], [("J-202551", Decimal("520802.87"))])
+    assert check_answer("J-202551 has $520,803 in actual cost.", [rows]).ok
+
+
+def test_a_unicode_minus_is_a_minus():
+    rows = call(["variance"], [(Decimal("-549091.45"),)])
+    assert check_answer("Change: −$549,091.45.", [rows]).ok
+
+
+def test_a_date_in_the_result_supports_quoting_that_date():
+    import datetime as dt
+    rows = call(["last_cost_date"], [(dt.date(2026, 9, 24),)])
+    assert check_answer("Data runs through September 24, 2026.", [rows]).ok
+
+
+def test_a_negative_restated_as_a_magnitude_is_grounded():
+    rows = call(["JobNumber", "gross_margin"], [("J-202549", Decimal("-27857.16"))])
+    assert check_answer("J-202549 is $27,857 over contract value.", [rows]).ok

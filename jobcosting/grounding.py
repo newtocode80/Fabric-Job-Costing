@@ -29,7 +29,7 @@ from __future__ import annotations
 import functools
 import re
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -107,12 +107,21 @@ def declared_figures(model_path: Path = MODEL_PATH) -> frozenset[Decimal]:
     """Figures the model declares as known issues.
 
     These reach the agent through the system prompt, so quoting one is reading the
-    declaration rather than inventing a number. Scoped to the known-issues section
-    (`data_quality` in model.yaml) and nothing else.
+    declaration rather than inventing a number.
+
+    Two sections count. The known issues (`data_quality`), and `cannot_answer` --
+    the second is not a judgement call, because it holds figures the prompt
+    explicitly instructs the model to state when declining, such as "4,637 of
+    10,365 cost rows". Flagging a model for following its own instructions is
+    nonsense.
+
+    Table row counts and column descriptions are NOT included. That boundary is
+    what keeps "52 total minus the 8 above = 44 assessable" a failure.
     """
     model = yaml.safe_load(Path(model_path).read_text())
     found: set[Decimal] = set()
-    for scalar in _walk(model.get("data_quality", [])):
+    sections = [model.get("data_quality", []), model.get("cannot_answer", [])]
+    for scalar in _walk(sections):
         for token in DECLARED_NUMBER.findall(str(scalar)):
             value = _to_decimal(token)
             if value is not None:
@@ -137,7 +146,10 @@ def extract_numbers(text: str) -> list[Decimal]:
 
     List markers and ordinals are not numbers stated about the data.
     """
-    body = LIST_MARKER.sub("", text or "")
+    # U+2212 is a minus sign, and prose uses it. Without this, "-549,091.45"
+    # extracts as positive and fails to match the negative value in the result.
+    # En and em dashes are left alone: they punctuate and separate ranges.
+    body = LIST_MARKER.sub("", (text or "").replace("\u2212", "-"))
     found = []
     for token in NUMBER.findall(body):
         value = _to_decimal(token)
@@ -154,6 +166,26 @@ def _numeric(value: Any) -> Decimal | None:
     if isinstance(value, (int, float)):
         return Decimal(str(value))
     return None
+
+
+def _subset_sums(column: list[Decimal]) -> set[Decimal]:
+    """Sums of parts of a column.
+
+    "Direct costs are 94% of spend" adds three of four percentages; "combined they
+    are $815,892" adds two of twelve clients. Both follow directly from the rows,
+    which is what the rule permits -- the whole-column sum alone does not cover it.
+    Bounded hard: short columns only. Anything longer is left alone, because the
+    coincidences cost more than the check gains.
+    """
+    if len(column) > 12:
+        # Pairwise sums over a long column manufacture coincidences: across 33
+        # late-job durations they grounded both 39 and 52, which were invented.
+        # A column that long is not one an answer adds up by hand anyway.
+        return set()
+    totals = {Decimal(0)}
+    for value in column:
+        totals |= {total + value for total in totals}
+    return totals
 
 
 def _values_from_rows(columns: Sequence[str], rows: Sequence[Sequence[Any]]):
@@ -178,28 +210,43 @@ def _values_from_rows(columns: Sequence[str], rows: Sequence[Sequence[Any]]):
             if number is not None:
                 cells.add(number)
                 column.append(number)
-            elif isinstance(value, str):
-                for token in NUMBER.findall(value):
-                    inner = _to_decimal(token)
-                    if inner is not None:
-                        cells.add(inner)
+            else:
+                # Dates carry numbers an answer legitimately quotes: a result row
+                # holding 2026-09-24 supports "through September 24, 2026".
+                text = value.isoformat() if hasattr(value, "isoformat") else value
+                if isinstance(text, str):
+                    # A cell is data, not prose, so the permissive pattern is used:
+                    # "2026-09-24" must yield 24, which the prose rule's
+                    # hyphen lookbehind would drop as part of an identifier.
+                    for token in DECLARED_NUMBER.findall(text):
+                        inner = _to_decimal(token)
+                        if inner is not None:
+                            cells.add(inner)
         if column:
             aggregates.update({sum(column), min(column), max(column), Decimal(len(column))})
+            aggregates.update(_subset_sums(column))
 
     return cells, aggregates
 
 
 def _matches(stated: Decimal, supported: Iterable[Decimal]) -> bool:
-    """True when `stated` equals a supported value, at any plausible scale."""
+    """True when `stated` equals a supported value, at any plausible scale.
+
+    Comparison happens at the precision the PROSE uses. "$520,803" is how an answer
+    writes the cell 520802.87, and "$4.5 million" is how it writes 4497901.88 --
+    rounding for readability is not inventing a figure.
+    """
+    precision = Decimal(1).scaleb(stated.as_tuple().exponent)
     for value in supported:
-        for scale in SCALES:
-            scaled = value / scale
-            if stated == scaled:
-                return True
-            # Allow the prose to round: "$4.5 million", "23.1%".
-            for places in (Decimal("0.1"), Decimal("0.01")):
+        # A negative is routinely restated as a magnitude: a gross margin of
+        # -27,857.16 is written "$27,857 over contract value".
+        for signed in ({value, -value} if value else {value}):
+            for scale in SCALES:
+                scaled = signed / scale
+                if stated == scaled:
+                    return True
                 try:
-                    if scaled.quantize(places) == stated.quantize(places):
+                    if scaled.quantize(precision, rounding=ROUND_HALF_UP) == stated:
                         return True
                 except InvalidOperation:
                     continue

@@ -145,6 +145,11 @@ def render(model: dict) -> str:
         w(f"```sql\n{pat['sql'].rstrip()}\n```")
         if pat.get("grain_note"):
             w(f"- {flow(pat['grain_note'])}")
+        if pat.get("required_caveats"):
+            w("")
+            w("**The answer must state all of these. They are not optional:**")
+            for caveat in pat["required_caveats"]:
+                w(f"- {flow(caveat)}")
         for note in pat.get("notes", []):
             w(f"- {flow(note)}")
 
