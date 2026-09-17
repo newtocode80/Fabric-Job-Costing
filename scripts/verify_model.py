@@ -89,7 +89,29 @@ def main() -> int:
 
     print()
     print("=" * 78)
-    print("2. RELATIONSHIPS -- cardinality and orphans on both sides")
+    print("2. COLUMN COVERAGE -- every real column documented, and no invented ones")
+    print("=" * 78)
+    lineage = set(model["lineage_columns"])
+    print(f"{'Table':<18} {'In data':>8} {'Lineage':>8} {'Documented':>11}  Result")
+    print("-" * 78)
+    for table in model["tables"]:
+        name = table["name"]
+        actual = {d[0] for d in con.execute(f'SELECT * FROM "{name}" LIMIT 0').description}
+        business = actual - lineage
+        documented = set(table["columns"])
+        missing, invented = business - documented, documented - actual
+        verdict = "ok"
+        if missing:
+            verdict = f"UNDOCUMENTED: {', '.join(sorted(missing))}"
+            failures.append(f"{name}: columns in data but not in model.yaml: {sorted(missing)}")
+        if invented:
+            verdict = f"NOT IN DATA: {', '.join(sorted(invented))}"
+            failures.append(f"{name}: columns in model.yaml but not in data: {sorted(invented)}")
+        print(f"{name:<18} {len(actual):>8} {len(actual & lineage):>8} {len(documented):>11}  {verdict}")
+
+    print()
+    print("=" * 78)
+    print("3. RELATIONSHIPS -- cardinality and orphans on both sides")
     print("=" * 78)
     for rel in model["relationships"]:
         ft, fc = rel["from"]["table"], rel["from"]["column"]
@@ -97,7 +119,8 @@ def main() -> int:
         ev = rel.get("evidence", {})
         fexpr, texpr = join_sides(rel)
 
-        print(f"\n  {ft}.{fc}  ->  {tt}.{tc}   [{rel['cardinality']}]")
+        role = f"  role={rel['role']} (alias {rel['alias']})" if "role" in rel else ""
+        print(f"\n  {ft}.{fc}  ->  {tt}.{tc}   [{rel['cardinality']}]{role}")
         if rel.get("requires_cast"):
             print(f"    cast required: {rel['requires_cast']}")
         print(f"    join: {rel['join']}")

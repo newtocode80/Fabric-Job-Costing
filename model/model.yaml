@@ -29,18 +29,18 @@ tables:
       unique: true          # 52 distinct JobKey over 52 rows
     rows: 52
     columns:
-      JobKey:           {type: INTEGER,   desc: surrogate key}
-      JobNumber:        {type: VARCHAR,   desc: business job number, e.g. J-202503; unique, 52 distinct}
-      JobName:          {type: VARCHAR,   desc: descriptive name; NOT unique -- 27 distinct over 52 jobs}
-      ClientName:       {type: VARCHAR,   desc: customer; 11 distinct. The only client attribute in the model}
-      JobType:          {type: VARCHAR,   desc: HVAC, Electrical, Mechanical}
-      StartDate:        {type: TIMESTAMP, desc: job start; midnight-aligned}
-      ScheduledEndDate: {type: TIMESTAMP, desc: planned completion}
-      ActualEndDate:    {type: TIMESTAMP, desc: actual completion; NULL for 8 jobs -- see data_quality}
-      ContractValue:    {type: DOUBLE,    desc: contracted value. Additive across jobs, but one value per job -- double-counts if a job repeats in the result set}
-      Status:           {type: VARCHAR,   desc: Active (4) or Complete (48)}
-      ProjectManager:   {type: VARCHAR,   desc: 4 distinct}
-      HasDateDefect:    {type: BOOLEAN,   desc: upstream data-quality flag. True for exactly the 4 jobs marked Complete with a NULL ActualEndDate}
+      JobKey: {type: INTEGER, desc: "surrogate key"}
+      JobNumber: {type: VARCHAR, desc: "business job number, e.g. J-202503; unique, 52 distinct"}
+      JobName: {type: VARCHAR, desc: "descriptive name; NOT unique -- 27 distinct over 52 jobs"}
+      ClientName: {type: VARCHAR, desc: "customer; 11 distinct. The only client attribute in the model"}
+      JobType: {type: VARCHAR, desc: "HVAC, Electrical, Mechanical"}
+      StartDate: {type: TIMESTAMP, desc: "job start; midnight-aligned"}
+      ScheduledEndDate: {type: TIMESTAMP, desc: "planned completion"}
+      ActualEndDate: {type: TIMESTAMP, desc: "actual completion; NULL for 8 jobs -- see data_quality"}
+      ContractValue: {type: DOUBLE, desc: "contracted value. Additive across jobs, but one value per job -- double-counts if a job repeats in the result set"}
+      Status: {type: VARCHAR, desc: "Active (4) or Complete (48)"}
+      ProjectManager: {type: VARCHAR, desc: "4 distinct"}
+      HasDateDefect: {type: BOOLEAN, desc: "upstream data-quality flag. True for exactly the 4 jobs marked Complete with a NULL ActualEndDate"}
 
   - name: dim_cost_type
     role: dimension
@@ -51,7 +51,7 @@ tables:
     rows: 4
     columns:
       CostTypeKey:  {type: VARCHAR, desc: "surrogate key stored as TEXT ('1'..'4') -- both facts store it as INTEGER. Joins need a cast"}
-      CostType:     {type: VARCHAR, desc: Labour, Material, Subcontractor, Equipment}
+      CostType: {type: VARCHAR, desc: "Labour, Material, Subcontractor, Equipment"}
       CostCategory: {type: VARCHAR, desc: "Direct (Labour, Material, Subcontractor) or Indirect (Equipment)"}
 
   - name: dim_employee
@@ -62,9 +62,9 @@ tables:
       unique: true          # 45 distinct over 45 rows
     rows: 45
     columns:
-      EmployeeKey:  {type: INTEGER, desc: surrogate key}
+      EmployeeKey: {type: INTEGER, desc: "surrogate key"}
       EmployeeName: {type: VARCHAR, desc: "NOT unique -- 42 distinct over 45 employees. Three names are each shared by two different employees, so grouping by name merges different people. Group by EmployeeKey"}
-      Trade:        {type: VARCHAR, desc: Apprentice, Foreman, Pipefitter and 2 others}
+      Trade: {type: VARCHAR, desc: "Apprentice, Foreman, Pipefitter and 2 others"}
       HourlyRate:   {type: DOUBLE,  desc: "standard rate on the employee record. NOT the rate a cost row was charged at -- fact_job_cost stores CostAmount directly and the two need not agree"}
       Region:       {type: VARCHAR, desc: "North, Central, South. The only region attribute in the model; there is no region dimension and no region on any job"}
 
@@ -79,12 +79,12 @@ tables:
     columns:
       DateKey:       {type: VARCHAR, desc: "YYYYMMDD as TEXT. Verified to match Date on every row"}
       Date:          {type: VARCHAR, desc: "YYYY-MM-DD as TEXT, not a DATE. Cast before comparing to a fact date"}
-      Year:          {type: VARCHAR, desc: 2024-2026}
+      Year: {type: VARCHAR, desc: "2024-2026"}
       Quarter:       {type: VARCHAR, desc: "1-4, calendar"}
       MonthNumber:   {type: VARCHAR, desc: "1-12 stored as TEXT -- sorts 1,10,11,12,2,3... Cast to INTEGER to order by it"}
-      MonthName:     {type: VARCHAR, desc: full month name}
-      WeekOfYear:    {type: VARCHAR, desc: 1-52}
-      DayOfWeek:     {type: VARCHAR, desc: 1-7}
+      MonthName: {type: VARCHAR, desc: "full month name"}
+      WeekOfYear: {type: VARCHAR, desc: "1-52"}
+      DayOfWeek: {type: VARCHAR, desc: "1-7"}
       IsWeekend:     {type: VARCHAR, desc: "the strings 'True'/'False', not a boolean"}
       FiscalYear:    {type: VARCHAR, desc: "fiscal year starting in July -- July 2025 is FiscalYear 2026"}
       FiscalQuarter: {type: VARCHAR, desc: "1-4, fiscal (Q1 = Jul-Sep)"}
@@ -100,9 +100,9 @@ tables:
       unique: true          # 26 distinct over 26 rows
     rows: 26
     columns:
-      ChangeOrderKey: {type: INTEGER,   desc: surrogate key}
-      JobKey:         {type: INTEGER,   desc: foreign key to dim_job}
-      DateSubmitted:  {type: TIMESTAMP, desc: submitted date; populated on all 26}
+      ChangeOrderKey: {type: INTEGER, desc: "surrogate key"}
+      JobKey: {type: INTEGER, desc: "foreign key to dim_job"}
+      DateSubmitted: {type: TIMESTAMP, desc: "submitted date; populated on all 26"}
       DateApproved:   {type: TIMESTAMP, desc: "approval date; populated on exactly the 7 Approved rows, NULL on all Pending and Rejected"}
       Amount:         {type: DOUBLE,    desc: "change order value. Additive. Includes Pending and Rejected rows -- filter on Status to get approved value only"}
       Status:         {type: VARCHAR,   desc: "Approved (7), Pending (11), Rejected (8)"}
@@ -118,9 +118,9 @@ tables:
       unique: true          # 196 distinct pairs over 196 rows -- PROVEN
     rows: 196
     columns:
-      JobKey:       {type: INTEGER, desc: foreign key to dim_job}
+      JobKey: {type: INTEGER, desc: "foreign key to dim_job"}
       CostTypeKey:  {type: INTEGER, desc: "foreign key to dim_cost_type, which stores the key as TEXT -- cast to join"}
-      BudgetAmount: {type: DOUBLE,  desc: budgeted cost. Additive}
+      BudgetAmount: {type: DOUBLE, desc: "budgeted cost. Additive"}
       BudgetHours:  {type: DOUBLE,  desc: "budgeted hours. Populated ONLY for CostTypeKey 1 (Labour); exactly 0.0 on all 147 Material, Subcontractor and Equipment rows. Summing it across cost types is meaningless"}
     notes:
       - "Complete cross product: 49 jobs x 4 cost types = 196 rows, every combination present."
@@ -139,12 +139,12 @@ tables:
     columns:
       CostID:       {type: INTEGER,   desc: "intended transaction key. NOT unique -- two values repeat. Do not COUNT DISTINCT on it to count transactions"}
       JobKey:       {type: INTEGER,   desc: "foreign key to dim_job. 14 values are absent from dim_job -- see data_quality"}
-      CostDate:     {type: TIMESTAMP, desc: date the cost was incurred; midnight-aligned on every row}
+      CostDate: {type: TIMESTAMP, desc: "date the cost was incurred; midnight-aligned on every row"}
       CostTypeKey:  {type: INTEGER,   desc: "foreign key to dim_cost_type, which stores the key as TEXT -- cast to join"}
       CostTypeRaw:  {type: VARCHAR,   desc: "uncleaned source label, 16 spelling and casing variants ('LAB', 'Labor', 'labour ' with a trailing space, 'sub-contractor', ...). Never group by this -- use CostType or join dim_cost_type"}
       EmployeeKey:  {type: DOUBLE,    desc: "foreign key to dim_employee, stored as DOUBLE because it is NULL on 5,728 of 10,365 rows. All non-null values are whole numbers. NULL on every non-Labour row by design, plus 40 Labour rows"}
       Hours:        {type: DOUBLE,    desc: "hours worked. NULL on 5,782 rows -- populated for Labour only. Additive within Labour"}
-      CostAmount:   {type: DOUBLE,    desc: actual cost incurred. Fully additive, never NULL}
+      CostAmount: {type: DOUBLE, desc: "actual cost incurred. Fully additive, never NULL"}
       SourceSystem: {type: VARCHAR,   desc: "ERP (6,279), FIELD_APP (2,590), LEGACY (1,496). All three carry all 16 raw spelling variants, so source does not predict cleanliness"}
       CostType:     {type: VARCHAR,   desc: "cleaned cost type, denormalised onto the fact. Verified to agree with dim_cost_type.CostType on every row, so joining the dimension is optional unless CostCategory is needed"}
     notes:
@@ -243,43 +243,163 @@ relationships:
       orphan_fact_rows: 0
       unreferenced_dimension_rows: 30     # 30 of 52 jobs have no change order
 
-# Joins the data would support but that are NOT declared, because whether they are
-# intended is the model owner's call, not something the data can settle.
-undeclared_candidates:
 
-  - tables: [dim_job, dim_date]
-    columns: [StartDate, ScheduledEndDate, ActualEndDate]
-    finding: >
-      Three date columns, so dim_date would be a role-playing dimension with three
-      separate joins, not one. Containment is near-total but imperfect:
-      StartDate 0 orphans of 52, ScheduledEndDate 2 orphans, ActualEndDate 1 orphan
-      (all falling past dim_date's 2026-07-31 end). Which role is the default is a
-      modelling decision. Not declared.
+  # --- Role-playing date joins -------------------------------------------------
+  # dim_date attaches to more than one date column on dim_job and dim_change_order,
+  # so it is a ROLE-PLAYING dimension: each role is a separate relationship needing
+  # its own aliased copy of dim_date in the FROM clause. Never join dim_date once
+  # and expect it to serve two roles.
 
-  - tables: [dim_change_order, dim_date]
-    columns: [DateSubmitted, DateApproved]
-    finding: >
-      Both are fully contained in dim_date -- DateSubmitted 26 of 26 with 0 orphans,
-      DateApproved 7 of 7 with 0 orphans. Again two roles, so it would be two
-      relationships. Clean, but which is intended is not visible in the data.
-      Not declared.
+  - from: {table: dim_job, column: StartDate}
+    to:   {table: dim_date, column: Date}
+    role: job_start
+    alias: d_start
+    cardinality: many-to-one
+    join: CAST(dim_job.StartDate AS DATE) = CAST(dim_date.Date AS DATE)
+    means: when the job began
+    evidence:
+      one_side_unique: true
+      orphan_fact_rows: 0
+      unreferenced_dimension_rows: 620
 
-  - tables: [fact_job_budget, fact_job_cost]
-    finding: >
-      Budget and actual meet only through the shared dim_job and dim_cost_type
-      keys, not through a relationship. Aggregate each side to JobKey x CostTypeKey
-      separately and join the aggregates -- joining the two facts directly fans out
-      196 budget rows against 10,365 cost rows and inflates both totals.
-      49 jobs have both; 17 JobKeys have cost but no budget (14 of those are the
-      orphan keys absent from dim_job).
+  - from: {table: dim_job, column: ScheduledEndDate}
+    to:   {table: dim_date, column: Date}
+    role: job_scheduled_end
+    alias: d_sched
+    cardinality: many-to-one
+    join: CAST(dim_job.ScheduledEndDate AS DATE) = CAST(dim_date.Date AS DATE)
+    means: when the job was planned to finish
+    evidence:
+      one_side_unique: true
+      orphan_fact_rows: 2
+      unreferenced_dimension_rows: 623
+    warning: "2 of 52 jobs have a ScheduledEndDate past dim_date's end and drop out of an inner join."
 
-  - tables: [dim_employee, dim_job]
-    finding: >
-      dim_employee.Region is the only region attribute in the model. Nothing
-      connects it to a job, so "cost by region" can only mean the region of the
-      employee who booked the labour, which covers 45% of rows and no material,
-      subcontractor or equipment cost at all. There is no region dimension.
-      Not declared.
+  - from: {table: dim_job, column: ActualEndDate}
+    to:   {table: dim_date, column: Date}
+    role: job_actual_end
+    alias: d_actual
+    cardinality: many-to-one
+    optional: true
+    join: CAST(dim_job.ActualEndDate AS DATE) = CAST(dim_date.Date AS DATE)
+    means: when the job actually finished
+    evidence:
+      one_side_unique: true
+      fact_rows_with_key: 44
+      fact_rows_null_key: 8
+      orphan_fact_rows: 1
+      unreferenced_dimension_rows: 627
+    warning: >
+      NULL on 8 of 52 jobs (4 Active, plus the 4 DQ4 defect rows), and 1 more falls
+      past dim_date's end. An inner join on this role keeps 43 of 52 jobs.
+
+  - from: {table: dim_change_order, column: DateSubmitted}
+    to:   {table: dim_date, column: Date}
+    role: co_submitted
+    alias: d_sub
+    cardinality: many-to-one
+    join: CAST(dim_change_order.DateSubmitted AS DATE) = CAST(dim_date.Date AS DATE)
+    means: when the change order was raised
+    evidence:
+      one_side_unique: true
+      orphan_fact_rows: 0
+      unreferenced_dimension_rows: 643
+
+  - from: {table: dim_change_order, column: DateApproved}
+    to:   {table: dim_date, column: Date}
+    role: co_approved
+    alias: d_appr
+    cardinality: many-to-one
+    optional: true
+    join: CAST(dim_change_order.DateApproved AS DATE) = CAST(dim_date.Date AS DATE)
+    means: when the change order was approved
+    evidence:
+      one_side_unique: true
+      fact_rows_with_key: 7
+      fact_rows_null_key: 19
+      orphan_fact_rows: 0
+      unreferenced_dimension_rows: 662
+    warning: >
+      NULL on 19 of 26 change orders -- every Pending and Rejected row. An inner
+      join on this role keeps only the 7 Approved rows, silently dropping 73% of
+      change orders. Use a LEFT JOIN unless the question is specifically about
+      approvals.
+
+# Worked patterns for questions whose correct SQL shape is not obvious. Follow the
+# shape given; deviating from it produces numbers that look plausible and are wrong.
+analysis_patterns:
+
+  - name: budget_vs_actual
+    question_shapes:
+      - budget versus actual by job
+      - which jobs are over budget
+      - variance by cost type
+    rule: >
+      NEVER join fact_job_budget to fact_job_cost directly. They share no key at a
+      common grain: 196 budget rows fan out against 10,365 cost rows, inflating both
+      sides. Aggregate each fact to JobKey x CostTypeKey FIRST, then join the
+      aggregates.
+    sql: |
+      WITH b AS (
+          SELECT JobKey, CostTypeKey, sum(BudgetAmount) AS budget
+          FROM fact_job_budget GROUP BY 1, 2
+      ),
+      a AS (
+          SELECT JobKey, CostTypeKey, sum(CostAmount) AS actual
+          FROM fact_job_cost GROUP BY 1, 2
+      )
+      SELECT
+          j.JobNumber,
+          j.JobName,
+          ct.CostType,
+          coalesce(b.budget, 0)               AS budget,
+          coalesce(a.actual, 0)               AS actual,
+          coalesce(a.actual, 0) - coalesce(b.budget, 0) AS variance
+      FROM b
+      FULL OUTER JOIN a ON a.JobKey = b.JobKey AND a.CostTypeKey = b.CostTypeKey
+      LEFT JOIN dim_job j       ON j.JobKey = coalesce(b.JobKey, a.JobKey)
+      LEFT JOIN dim_cost_type ct ON ct.CostTypeKey = CAST(coalesce(b.CostTypeKey, a.CostTypeKey) AS VARCHAR)
+      ORDER BY variance DESC
+    notes:
+      - "FULL OUTER JOIN, not INNER: 3 jobs have a budget with no cost rows at that
+         cost type, and 17 JobKeys have cost with no budget at all."
+      - "LEFT JOIN to dim_job, not INNER: 14 of those 17 JobKeys do not exist in
+         dim_job (DQ2), and an inner join would hide 16,882.98 of real cost."
+      - Totals across the whole result double-count nothing, but filtering to one
+         side of the FULL OUTER JOIN reintroduces the omissions above.
+
+# Questions this model genuinely cannot answer. Say so plainly, say exactly what is
+# missing, and offer the nearest answerable question as a CHOICE -- do not quietly
+# answer the narrower question instead.
+cannot_answer:
+
+  - name: cost_or_revenue_by_region
+    question_shapes:
+      - cost by region
+      - which region is most profitable
+      - revenue or margin by region
+      - compare regions
+    why_not: >
+      Region exists in exactly one place in this model: dim_employee.Region. It
+      describes the EMPLOYEE, not the job. dim_job has no region column, and no
+      other table carries one, so there is no path from a job, a cost row, a budget
+      or a change order to a region. Cost cannot be attributed to a region.
+    what_would_be_needed: >
+      A region attribute on the job dimension -- a Region column on dim_job, or a
+      separate region dimension that dim_job has a foreign key to. Until that
+      exists, region is an employee attribute only.
+    offer_instead: >
+      Offer this as a DIFFERENT question the user may choose to ask, and wait for
+      them to ask it: "labour cost by the home region of the employee who booked
+      it". State its limits when offering -- it covers only the 4,637 of 10,365
+      cost rows that carry an EmployeeKey, which is labour only, and excludes all
+      material, subcontractor and equipment cost. It attributes cost to where the
+      employee is based, not where the work happened.
+    must_not: >
+      Do not run the labour-only query as the answer to a question about region.
+      Answering a narrower question than the one asked, without being asked to,
+      presents a partial figure as if it were the whole.
+
 
 data_quality:
 

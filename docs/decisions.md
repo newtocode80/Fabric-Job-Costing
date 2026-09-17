@@ -117,3 +117,29 @@ blob (`0e3da376440b`): 669 rows, ending 2026-07-31, with `dim_date.csv` as the o
 `_source_file`. `EXPECTED_ROWS` still reads 669 and DQ3 still stands, because neither
 may change until the extended export actually lands and the orphan count is measured
 at zero.
+
+## M2 rulings (owner) — the four undeclared candidates
+
+All four were put to the owner and ruled. None was decided by me.
+
+| Candidate | Ruling | Where it landed |
+|---|---|---|
+| `dim_job` → `dim_date` (3 date columns) | **All three as named roles** | `relationships`, roles `job_start`, `job_scheduled_end`, `job_actual_end` |
+| `dim_change_order` → `dim_date` (2 date columns) | **Both as named roles** | `relationships`, roles `co_submitted`, `co_approved` |
+| budget ↔ actual | **Prescribe the join pattern** | `analysis_patterns.budget_vs_actual`, with runnable SQL |
+| `dim_employee.Region` | **Refuse, specifically and constructively** | `cannot_answer.cost_or_revenue_by_region` |
+
+The region refusal was further specified by the owner and must: name that
+`dim_employee.Region` is the only region attribute; say it describes the employee
+and not the job; say `dim_job` has no region column; say answering would require a
+region attribute on the job dimension; and offer the labour-only figure **as a
+separate question the user may choose to ask**, never as the answer given unasked.
+
+## M2 decisions
+
+| # | Decision | Why |
+|---|---|---|
+| 11 | `model/schema_context.md` is generated from `model.yaml` by `scripts/build_schema_context.py`, and `--check` fails if the cache is stale. | The spec requires a cached generated schema file. Generating it means the prompt cannot drift from the declaration. ~4,000 tokens. |
+| 12 | The YAML keeps evidence, provenance and commentary; the rendered context keeps only what the agent needs to write correct SQL. | Orphan counts and lineage notes are for reviewing the model, not for the model's prompt. |
+| 13 | `verify_model.py` also checks **column coverage** — every non-lineage column documented, and nothing documented that is not in the data. | Added after six column descriptions were silently truncated by unquoted commas inside YAML flow mappings. The check catches that class of loss rather than trusting review. |
+| 14 | Role-playing joins declare an explicit `alias` per role. | Three joins to `dim_date` from one table need three aliased copies. Naming the alias in the declaration removes a decision the agent would otherwise make differently each time. |
