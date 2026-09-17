@@ -48,10 +48,10 @@ Ignore these columns entirely — they are ingest metadata with no business mean
 | `HourlyRate` | DOUBLE | standard rate on the employee record. NOT the rate a cost row was charged at -- fact_job_cost stores CostAmount directly and the two need not agree |
 | `Region` | VARCHAR | North, Central, South. The only region attribute in the model; there is no region dimension and no region on any job |
 
-### `dim_date` — dimension, 669 rows
+### `dim_date` — dimension, 822 rows
 **Grain:** one row per calendar day.
 **Key:** `DateKey` (verified unique).
-**Coverage:** 2024-10-01 to 2026-07-31, contiguous -- 669 rows across 669 calendar days, no gaps.
+**Coverage:** 2024-10-01 to 2026-12-31, contiguous -- 822 rows across 822 calendar days, no gaps.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -150,9 +150,7 @@ CAST(fact_job_cost.EmployeeKey AS INTEGER) = dim_employee.EmployeeKey
 ```sql
 CAST(fact_job_cost.CostDate AS DATE) = CAST(dim_date.Date AS DATE)
 ```
-- 85 rows have a key with no matching dimension row — an inner join drops them.
-- 19 dimension rows are never referenced — start from the dimension and LEFT JOIN to keep them.
-- dim_date stops at 2026-07-31 but cost runs to 2026-09-24. An inner join drops the most recent 85 rows, so "latest activity" and any trailing-period question answered through dim_date will be wrong. Filter on CostDate directly unless a fiscal or calendar attribute is actually needed.
+- 131 dimension rows are never referenced — start from the dimension and LEFT JOIN to keep them.
 
 **`fact_job_budget` → `dim_job`**
 ```sql
@@ -184,9 +182,7 @@ It attaches to several different date columns. Each role is a separate join need
 | `co_submitted` | `d_sub` | `CAST(dim_change_order.DateSubmitted AS DATE) = CAST(dim_date.Date AS DATE)` | when the change order was raised |
 | `co_approved` | `d_appr` | `CAST(dim_change_order.DateApproved AS DATE) = CAST(dim_date.Date AS DATE)` | when the change order was approved |
 
-> **`job_scheduled_end`** — 2 of 52 jobs have a ScheduledEndDate past dim_date's end and drop out of an inner join.
-
-> **`job_actual_end`** — NULL on 8 of 52 jobs (4 Active, plus the 4 DQ4 defect rows), and 1 more falls past dim_date's end. An inner join on this role keeps 43 of 52 jobs.
+> **`job_actual_end`** — NULL on 8 of 52 jobs (4 Active, plus the 4 DQ4 defect rows). An inner join on this role keeps 44 of 52 jobs. Date coverage itself is now complete.
 
 > **`co_approved`** — NULL on 19 of 26 change orders -- every Pending and Rejected row. An inner join on this role keeps only the 7 Approved rows, silently dropping 73% of change orders. Use a LEFT JOIN unless the question is specifically about approvals.
 
@@ -243,7 +239,6 @@ These are real defects in the source, not reasons to avoid the data. Where one a
 |---|---|---|---|---|
 | DQ1 | high | `fact_job_cost` | CostID is not unique. CostID 807 and CostID 3224 each appear twice. Within each pair every column matches except EmployeeKey, which is populated on one row and NULL on the other -- the signature of a failed merge upstream, not a true repeated transaction. | COUNT(DISTINCT CostID) undercounts by 2. Both copies carry the same CostAmount, so SUM(CostAmount) double-counts 347.30. The table has no valid single-column key. |
 | DQ2 | high | `fact_job_cost` | 14 JobKey values (53-71) appear in 30 cost rows but do not exist in dim_job. The fact references jobs the dimension has never heard of. | 16,882.98 of cost cannot be attributed to any job. Job-level totals and the grand total disagree by that amount depending on the join type. |
-| DQ3 | high | `dim_date` | dim_date ends 2026-07-31. fact_job_cost runs to 2026-09-24. 85 cost rows on 41 dates have no matching date row. | Any question answered through dim_date silently omits the last two months of activity. |
 | DQ4 | medium | `dim_job` | 4 jobs are marked Status = 'Complete' with a NULL ActualEndDate (JobKey 16, 21, 25, 37). These are exactly the 4 rows where HasDateDefect is True -- the flag is already computed upstream and means precisely this. | Duration and on-time analysis must exclude them or treat them as open. |
 | DQ5 | medium | `dim_employee` | EmployeeName is not unique. 'Chantal Gagnon' (keys 5, 27), 'Chantal Roy' (18, 34) and 'Luc Girard' (3, 29) are each two different employees. | Grouping by name merges distinct people. Group by EmployeeKey. |
 | DQ6 | low | `fact_job_cost` | CostTypeRaw holds 16 variants of 4 real values, including case differences, abbreviations and a trailing space ('labour '). | None if CostTypeKey or CostType is used -- both are clean and CostType agrees with the dimension on every row. CostTypeRaw is kept only as an audit trail. |

@@ -143,3 +143,34 @@ separate question the user may choose to ask**, never as the answer given unaske
 | 12 | The YAML keeps evidence, provenance and commentary; the rendered context keeps only what the agent needs to write correct SQL. | Orphan counts and lineage notes are for reviewing the model, not for the model's prompt. |
 | 13 | `verify_model.py` also checks **column coverage** — every non-lineage column documented, and nothing documented that is not in the data. | Added after six column descriptions were silently truncated by unquoted commas inside YAML flow mappings. The check catches that class of loss rather than trusting review. |
 | 14 | Role-playing joins declare an explicit `alias` per role. | Three joins to `dim_date` from one table need three aliased copies. Naming the alias in the declaration removes a decision the agent would otherwise make differently each time. |
+
+## dim_date extension — verified on arrival
+
+The 822-row export landed as commit `d75791c`. Every claim was re-measured, not assumed:
+
+| Check | Before | After |
+|---|---|---|
+| `verify_exports.py` | 669 | **822, all 7 tables ok** |
+| `fact_job_cost.CostDate` orphans | 85 rows / 41 dates | **0** |
+| `job_scheduled_end` orphans | 2 | **0** |
+| `job_actual_end` orphans | 1 | **0** |
+| Contiguity | 669 days | **822 rows over 822 calendar days, no gaps** |
+| `DateKey` vs `Date` | consistent | **consistent, 0 mismatches** |
+
+Appended rows carry `_source_file = dim_date_extension_2026H2` and
+`_bronze_run_id = manual-extension-20260917`, exactly as reported. **DQ3 was removed
+only after the containment check came back clean.** The provenance risk is recorded
+on the `dim_date` table as a `provenance` key that the renderer deliberately does not
+emit — it is something the repository must remember, not something the agent acts on.
+
+## M1 decisions
+
+| # | Decision | Why |
+|---|---|---|
+| 15 | A **manual tool-use loop**, not the SDK's beta `tool_runner`. | Three reasons the runner does not cover: the 3-call budget must be enforced *and* announced to the model when spent; every call's SQL, columns and rows must be captured for the `/ask` response shape at M4; and the runner is beta. |
+| 16 | `QueryEngine.run` returns a `QueryResult` (columns + rows), not bare rows as the spec writes it. | `/ask` must return `columns`, and column names cannot be recovered from tuples afterwards. A deliberate widening of the spec, noted here rather than made silently. |
+| 17 | When the call budget is spent the tool is **withdrawn** from the request. | Otherwise the model emits a call that cannot run and the turn is wasted. It is also told, in the same turn, to answer from what it has. |
+| 18 | The model sees at most 50 rows plus the true `row_count`; the caller gets every row. | A wide result would crowd the conversation. The model is told it was cut, so it aggregates in SQL rather than counting rows by eye. |
+| 19 | A failed query returns to the model as `is_error` with the DuckDB message. | This is error handling, not a guardrail. Parse-based rejection, the allowlist, LIMIT injection and the timeout all arrive at M3. |
+| 20 | Adaptive thinking (`thinking: {"type": "adaptive"}`). | Recommended for `claude-sonnet-4-6`; SQL over a model with cast-dependent joins and a required pattern is not a one-shot task. |
+| 21 | Reaching the model is wrapped in a **broad** `except Exception`. | Found by testing: unresolved credentials raise `TypeError`, not `APIError`, so a narrow handler let a traceback escape and would have killed a multi-question run. |

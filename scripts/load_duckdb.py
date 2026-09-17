@@ -26,7 +26,7 @@ DEFAULT_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "silver"
 EXPECTED_ROWS: dict[str, int] = {
     "dim_change_order": 26,
     "dim_cost_type": 4,
-    "dim_date": 669,
+    "dim_date": 822,
     "dim_employee": 45,
     "dim_job": 52,
     "fact_job_budget": 196,

@@ -74,8 +74,15 @@ tables:
     key:
       columns: [DateKey]
       unique: true          # 669 distinct over 669 rows; Date is equally unique
-    rows: 669
-    coverage: 2024-10-01 to 2026-07-31, contiguous -- 669 rows across 669 calendar days, no gaps
+    rows: 822
+    coverage: 2024-10-01 to 2026-12-31, contiguous -- 822 rows across 822 calendar days, no gaps
+    provenance: >
+      669 rows from the bronze ingest (_source_file dim_date.csv) plus 153 appended
+      directly to the silver Delta table (_source_file dim_date_extension_2026H2,
+      _bronze_run_id manual-extension-20260917). Bronze was not fixed, so a full
+      pipeline rerun would drop the appended rows and reinstate the coverage gap.
+      verify_exports.py pins the count at 822 to make that reversion fail loudly.
+      Not rendered into the prompt -- it is provenance, not something the agent acts on.
     columns:
       DateKey:       {type: VARCHAR, desc: "YYYYMMDD as TEXT. Verified to match Date on every row"}
       Date:          {type: VARCHAR, desc: "YYYY-MM-DD as TEXT, not a DATE. Cast before comparing to a fact date"}
@@ -204,14 +211,12 @@ relationships:
     requires_cast: TIMESTAMP on the fact, VARCHAR on the dimension
     evidence:
       one_side_unique: true               # 669 distinct over 669 rows
-      orphan_fact_rows: 85                # of 10,365, across 41 distinct dates
-      orphan_date_range: 2026-08-01 to 2026-09-24
-      unreferenced_dimension_rows: 19     # days with no cost activity, expected
-    warning: >
-      dim_date stops at 2026-07-31 but cost runs to 2026-09-24. An inner join
-      drops the most recent 85 rows, so "latest activity" and any trailing-period
-      question answered through dim_date will be wrong. Filter on CostDate
-      directly unless a fiscal or calendar attribute is actually needed.
+      orphan_fact_rows: 0                 # was 85 before dim_date was extended
+      unreferenced_dimension_rows: 131    # days with no cost activity, expected
+    note: >
+      Coverage is complete: every cost date has a matching date row, so an inner
+      join loses nothing. 131 date rows carry no cost, which is normal for a date
+      dimension -- start from dim_date and LEFT JOIN if empty periods must appear.
 
   - from: {table: fact_job_budget, column: JobKey}
     to:   {table: dim_job, column: JobKey}
@@ -260,7 +265,7 @@ relationships:
     evidence:
       one_side_unique: true
       orphan_fact_rows: 0
-      unreferenced_dimension_rows: 620
+      unreferenced_dimension_rows: 773
 
   - from: {table: dim_job, column: ScheduledEndDate}
     to:   {table: dim_date, column: Date}
@@ -271,9 +276,8 @@ relationships:
     means: when the job was planned to finish
     evidence:
       one_side_unique: true
-      orphan_fact_rows: 2
-      unreferenced_dimension_rows: 623
-    warning: "2 of 52 jobs have a ScheduledEndDate past dim_date's end and drop out of an inner join."
+      orphan_fact_rows: 0                 # was 2 before dim_date was extended
+      unreferenced_dimension_rows: 774
 
   - from: {table: dim_job, column: ActualEndDate}
     to:   {table: dim_date, column: Date}
@@ -287,11 +291,11 @@ relationships:
       one_side_unique: true
       fact_rows_with_key: 44
       fact_rows_null_key: 8
-      orphan_fact_rows: 1
-      unreferenced_dimension_rows: 627
+      orphan_fact_rows: 0                 # was 1 before dim_date was extended
+      unreferenced_dimension_rows: 779
     warning: >
-      NULL on 8 of 52 jobs (4 Active, plus the 4 DQ4 defect rows), and 1 more falls
-      past dim_date's end. An inner join on this role keeps 43 of 52 jobs.
+      NULL on 8 of 52 jobs (4 Active, plus the 4 DQ4 defect rows). An inner join on
+      this role keeps 44 of 52 jobs. Date coverage itself is now complete.
 
   - from: {table: dim_change_order, column: DateSubmitted}
     to:   {table: dim_date, column: Date}
@@ -303,7 +307,7 @@ relationships:
     evidence:
       one_side_unique: true
       orphan_fact_rows: 0
-      unreferenced_dimension_rows: 643
+      unreferenced_dimension_rows: 796
 
   - from: {table: dim_change_order, column: DateApproved}
     to:   {table: dim_date, column: Date}
@@ -318,7 +322,7 @@ relationships:
       fact_rows_with_key: 7
       fact_rows_null_key: 19
       orphan_fact_rows: 0
-      unreferenced_dimension_rows: 662
+      unreferenced_dimension_rows: 815
     warning: >
       NULL on 19 of 26 change orders -- every Pending and Rejected row. An inner
       join on this role keeps only the 7 Approved rows, silently dropping 73% of
@@ -425,15 +429,6 @@ data_quality:
     impact: >
       16,882.98 of cost cannot be attributed to any job. Job-level totals and the
       grand total disagree by that amount depending on the join type.
-
-  - id: DQ3
-    severity: high
-    table: dim_date
-    finding: >
-      dim_date ends 2026-07-31. fact_job_cost runs to 2026-09-24. 85 cost rows on
-      41 dates have no matching date row.
-    impact: Any question answered through dim_date silently omits the last two
-      months of activity.
 
   - id: DQ4
     severity: medium
