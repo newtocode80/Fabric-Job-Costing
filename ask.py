@@ -83,7 +83,11 @@ def main() -> int:
                 "Set one of:\n"
                 "  export ANTHROPIC_API_KEY=sk-ant-...\n"
                 "  export ANTHROPIC_AUTH_TOKEN=...\n"
-                "  ant auth login          (stores a profile the SDK reads)",
+                "  ant auth login          (stores a profile the SDK reads)\n"
+                "In a Claude Code cloud session, add ANTHROPIC_API_KEY to the\n"
+                "environment's variables and start a NEW session -- a running\n"
+                "session copies the values once, at startup.\n"
+                f"\nRequests would go to: {client.base_url}",
                 file=sys.stderr,
             )
             return 2

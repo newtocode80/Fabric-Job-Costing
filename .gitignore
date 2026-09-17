@@ -2,6 +2,15 @@
 # Only generated output is ignored.
 data/generated/
 
+# Credentials must never reach the repository. The supported way to supply a key
+# is an environment variable on the cloud environment; these patterns are a
+# backstop for local runs.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
 __pycache__/
 *.pyc
 .venv/
