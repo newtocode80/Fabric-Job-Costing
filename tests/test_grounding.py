@@ -159,3 +159,49 @@ def test_the_original_invented_denominator_still_fails():
 def test_all_52_known_jobs_still_fails():
     result = call(["JobNumber"], [("J-202501",), ("J-202502",)])
     assert Decimal("52") in check_answer("2 of all 52 known jobs are affected.", [result]).ungrounded
+
+
+# --------------------------------------- list markers and ordinals are not figures
+
+def test_ordered_list_markers_are_not_quantities():
+    """An answer that numbers its points was reporting 8, 9, 10... as figures."""
+    answer = (
+        "The jobs over budget are:\n"
+        "8. J-202551 - $232,248 over\n"
+        "9. J-202549 - $167,391 over\n"
+        "10. J-202505 - $148,829 over\n"
+    )
+    assert extract_numbers(answer) == [
+        Decimal("232248"), Decimal("167391"), Decimal("148829"),
+    ]
+
+
+def test_list_markers_with_a_bracket_are_also_ignored():
+    assert extract_numbers("1) first\n2) second\n3) third") == []
+
+
+def test_indented_list_markers_are_ignored():
+    assert extract_numbers("  1. alpha\n  2. beta") == []
+
+
+def test_a_number_starting_a_sentence_is_still_a_quantity():
+    """The marker rule must not swallow real figures at the start of a line."""
+    assert extract_numbers("30 cost rows reference jobs that do not exist.") == [Decimal("30")]
+    assert extract_numbers("2 jobs finished late.") == [Decimal("2")]
+
+
+def test_ordinals_are_not_quantities():
+    assert extract_numbers("the 1st and 2nd quarters, and the 23rd job") == []
+    assert extract_numbers("4th quarter cost was $1,200.00") == [Decimal("1200.00")]
+
+
+def test_a_bullet_list_keeps_its_figures():
+    """Bullets are not numbered markers; the numbers in them are real."""
+    answer = "- Material: $4,497,901.88\n- Labour: $1,715,039.31"
+    assert extract_numbers(answer) == [Decimal("4497901.88"), Decimal("1715039.31")]
+
+
+def test_a_numbered_list_of_real_figures_still_reports_the_figures():
+    rows = call(["JobNumber", "over"], [("J-202551", Decimal("232248.41"))])
+    answer = "Jobs over budget:\n1. J-202551 is $232,248.41 over budget."
+    assert check_answer(answer, [rows]).ok

@@ -340,3 +340,25 @@ lists and dicts — and the unknown-type fallback.
 bound the path as a default argument, so it was captured at import and ignored any
 override — the test meant to write to a temp directory wrote into the repo instead.
 The path is now resolved at call time.
+
+## List markers and ordinals are not figures
+
+An answer that numbered its findings had its own list markers reported as invented
+numbers: `8. J-202551 - $232,248 over` contributed an 8. Same for ordinals -- the
+"1" in "1st quarter".
+
+`extract_numbers` now strips a leading `N.` or `N)` marker from each line before
+extracting, and rejects a number followed by an ordinal suffix. A number that merely
+*opens* a sentence keeps its meaning: "30 cost rows are orphaned" still reports 30.
+
+Two process notes, both mine:
+
+- **A backtracking hole.** `23rd` failed the ordinal check as "23", then the engine
+  backtracked to "2" and passed it. Fixed with a not-followed-by-digit guard.
+- **Two `str.replace` calls silently no-opped** because I did not assert the anchor
+  was present, leaving `LIST_MARKER` referenced but undefined. Every edit to a
+  source file now asserts its anchor before replacing.
+
+`evals/last-run.json` is **no longer gitignored.** Ignoring it contradicted the one
+thing it is for: re-scoring a run in a different session without spending fifteen
+more model calls. It is output, but it has to be shareable.

@@ -42,8 +42,21 @@ MODEL_PATH = Path(__file__).resolve().parents[1] / "model" / "model.yaml"
 # The lookbehind keeps identifiers out. Job numbers look like J-202551, and without
 # it that reads as the number -202551, which then fails to match anything in the
 # data and is reported as an invented figure. Anything glued to a letter, a dot or
-# a hyphen is part of a token, not a quantity.
-NUMBER = re.compile(r"(?<![A-Za-z0-9._-])-?\$?\d[\d,]*(?:\.\d+)?%?(?!\.\d)")
+# a hyphen is part of a token, not a quantity. The first trailing lookahead does
+# the same for dotted forms such as 2.1.3; the second drops ordinals, because the
+# "1" in "1st quarter" is not a figure about the data either. (?!\d) stops the
+# engine backtracking to a shorter prefix to dodge that check -- without it "23rd"
+# fails as "23" and then succeeds as "2".
+NUMBER = re.compile(
+    r"(?<![A-Za-z0-9._-])-?\$?\d[\d,]*(?:\.\d+)?%?(?!\.\d)(?!\d)(?!(?:st|nd|rd|th)\b)"
+)
+
+# "8. J-202551 - $232,248 over" -- the 8 numbers the point, it is not a quantity.
+# An answer that lists its findings was having its own list markers reported as
+# invented figures. Only a marker at the start of a line, followed by "." or ")"
+# and a space, counts -- so a sentence that legitimately opens with a number, such
+# as "30 cost rows are orphaned", keeps it.
+LIST_MARKER = re.compile(r"^[ \t]*\d+[.)][ \t]+", re.MULTILINE)
 
 # Scales the prose may restate a value at: "4.5 million" for 4497901.88.
 SCALES = (Decimal(1), Decimal(1_000), Decimal(1_000_000), Decimal(1_000_000_000))
@@ -120,9 +133,13 @@ def _to_decimal(token: str) -> Decimal | None:
 
 
 def extract_numbers(text: str) -> list[Decimal]:
-    """Every number stated in the text, in order, duplicates kept."""
+    """Every number stated in the text, in order, duplicates kept.
+
+    List markers and ordinals are not numbers stated about the data.
+    """
+    body = LIST_MARKER.sub("", text or "")
     found = []
-    for token in NUMBER.findall(text or ""):
+    for token in NUMBER.findall(body):
         value = _to_decimal(token)
         if value is not None:
             found.append(value)
