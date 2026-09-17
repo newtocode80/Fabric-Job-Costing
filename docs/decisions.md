@@ -86,3 +86,34 @@ opens with the retirement notice.
 | 8 | `fact_job_cost.CostID` is declared `unique: false` with a separate `working_key`, rather than picking a key that happens to work. | `CostID` is the intended key and it is violated. Declaring it clean would hide DQ1; declaring a different key would hide that the intended one is broken. |
 | 9 | Four joins the data would support are listed under `undeclared_candidates` instead of `relationships`. | Each is a modelling decision the data cannot settle — role-playing date joins where more than one date column qualifies, and a region attribute with no path to a job. Owner's call. |
 | 10 | Casts are written into each relationship's `join` clause, and the verifier runs that exact clause. | Three of the seven joins need a cast. Testing a reconstructed join would prove something other than what the app issues. |
+
+## The dim_date extension — how it was made, and why it is fragile
+
+**Reported by the owner.** `dim_date` was extended from 669 to 822 rows, now running
+through 2026-12-31, to close the coverage gap recorded as DQ3.
+
+**How.** The new rows were **appended directly to the silver Delta table**. The
+bronze source `dim_date.csv` was *not* fixed and the pipeline was *not* re-run.
+Appended rows are stamped `_source_file = dim_date_extension_2026H2`, distinguishing
+them from the original 669 rows stamped `dim_date.csv`.
+
+**Why this matters.**
+
+| Risk | Consequence |
+|---|---|
+| Bronze is still short | `dim_date.csv` still ends 2026-07-31. Bronze and silver now disagree. |
+| A pipeline rerun reverts it | Any full refresh that rebuilds silver from bronze **silently drops the 153 appended rows** and DQ3 returns. |
+| The fix is invisible to lineage | Everything else in the model carries a single `_bronze_run_id` from one ingest. These rows do not come from that run. |
+
+**Consequence for this app.** The date coverage the model depends on is not
+reproducible from source. `scripts/verify_exports.py` pins the expected row count,
+so a silent reversion fails loudly rather than quietly shortening every date-filtered
+answer. That is a tripwire, not a fix — the durable fix is correcting bronze and
+re-running the pipeline.
+
+**Status in this repository: NOT YET PRESENT.** As of the latest fetch, every ref —
+this branch, `origin/main` and `FETCH_HEAD` — carries the same `dim_date.parquet`
+blob (`0e3da376440b`): 669 rows, ending 2026-07-31, with `dim_date.csv` as the only
+`_source_file`. `EXPECTED_ROWS` still reads 669 and DQ3 still stands, because neither
+may change until the extended export actually lands and the orphan count is measured
+at zero.
