@@ -24,10 +24,83 @@ function isNumeric(value) {
     (typeof value === "string" && value !== "" && /^-?\d+(\.\d+)?$/.test(value));
 }
 
-function renderAnswer(text) {
-  answerEl.replaceChildren();
-  const paragraphs = String(text || "").split(/\n\s*\n/).filter((p) => p.trim());
-  for (const p of paragraphs) answerEl.append(el("p", null, p.trim()));
+/* ---------------------------------------------------------------- markdown
+
+   The model writes prose with light markdown. Rendering it as plain text shows
+   literal asterisks; rendering it with innerHTML would make model output into
+   markup. So this builds real DOM nodes and never assigns HTML, which keeps the
+   guarantee that nothing from the API is ever interpreted as markup.
+
+   Deliberately small: the subset the prose actually uses -- paragraphs, bold,
+   italic, inline code, bullet and numbered lists, and fenced code. The system
+   prompt already tells the model not to emit tables or SQL in the answer.
+*/
+
+const INLINE = /(\*\*|__)(.+?)\1|(\*|_)(.+?)\3|`([^`]+)`/g;
+
+function inlineNodes(text) {
+  const nodes = [];
+  let last = 0;
+  for (const m of text.matchAll(INLINE)) {
+    if (m.index > last) nodes.push(document.createTextNode(text.slice(last, m.index)));
+    if (m[2] !== undefined) nodes.push(el("strong", null, m[2]));
+    else if (m[4] !== undefined) nodes.push(el("em", null, m[4]));
+    else nodes.push(el("code", null, m[5]));
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) nodes.push(document.createTextNode(text.slice(last)));
+  return nodes;
+}
+
+function listItem(line) {
+  const li = el("li");
+  li.append(...inlineNodes(line));
+  return li;
+}
+
+function renderMarkdown(text, target) {
+  target.replaceChildren();
+  const lines = String(text || "").split("\n");
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (!line.trim()) { i++; continue; }
+
+    if (line.trimStart().startsWith("```")) {              // fenced code
+      const body = [];
+      i++;
+      while (i < lines.length && !lines[i].trimStart().startsWith("```")) body.push(lines[i++]);
+      i++;
+      target.append(el("pre", null, body.join("\n")));
+      continue;
+    }
+
+    const bullet = /^\s*[-*+]\s+(.*)$/;
+    const number = /^\s*\d+[.)]\s+(.*)$/;
+    const kind = bullet.test(line) ? bullet : number.test(line) ? number : null;
+    if (kind) {                                            // a run of list items
+      const list = el(kind === bullet ? "ul" : "ol");
+      while (i < lines.length && kind.test(lines[i])) {
+        list.append(listItem(lines[i].match(kind)[1]));
+        i++;
+      }
+      target.append(list);
+      continue;
+    }
+
+    const para = [];                                       // paragraph until blank
+    while (i < lines.length && lines[i].trim() &&
+           !bullet.test(lines[i]) && !number.test(lines[i]) &&
+           !lines[i].trimStart().startsWith("```")) {
+      para.push(lines[i].trim());
+      i++;
+    }
+    const p = el("p");
+    p.append(...inlineNodes(para.join(" ")));
+    target.append(p);
+  }
 }
 
 function renderTable(columns, rows) {
@@ -115,7 +188,7 @@ async function ask(question) {
     }
     const data = await response.json();
 
-    renderAnswer(data.answer);
+    renderMarkdown(data.answer, answerEl);
     if (data.error) {
       noticeEl.append(el("div", "notice", data.error));
     }

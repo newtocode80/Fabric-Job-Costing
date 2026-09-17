@@ -110,6 +110,18 @@ button:disabled { opacity: 0.45; cursor: default; }
 }
 #answer p { margin: 0 0 1rem; }
 #answer p:last-child { margin-bottom: 0; }
+#answer ul, #answer ol { margin: 0 0 1rem; padding-left: 1.6rem; }
+#answer li { margin-bottom: 0.4rem; }
+#answer strong { font-weight: 650; }
+#answer code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+#answer pre { margin: 0 0 1rem; font-size: 0.95rem; }
 
 .notice {
   margin-top: 1.75rem;

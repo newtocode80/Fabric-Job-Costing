@@ -243,3 +243,43 @@ the CLI prints the clamp explicitly rather than showing only the wrapped query.
 `table.append(el("thead")).firstChild`, but `Node.append()` returns `undefined`, so
 the call threw and the panel never opened. Only launching the page and watching the
 console caught it — `TestClient` never executes the JavaScript.
+
+## Narrative arithmetic — the third failure of the same kind
+
+Observed three times: "33 of 44 finished late" (44 never queried), "all 52 known jobs"
+and "30 jobs under budget". The guardrails protect the SQL; nothing protected the prose.
+
+**System prompt rule 2** now requires that counts, totals and percentages be present
+in the returned rows or follow directly from them, and that a denominator or
+comparison group be *queried for* rather than estimated — with an explicit
+instruction that if the remaining call budget will not allow it, the model gives the
+number it has and says what it could not establish.
+
+**`jobcosting/grounding.py`** enforces it mechanically. A number in the prose counts
+as supported when it is a cell value, a row count, a column sum/min/max/count, a
+number from the question, a percentage of any two of those, or any of these restated
+at scale ("$4.5 million"). Anything else is reported, by value, for a human to judge.
+
+It is **conservative and reports rather than concludes**: it can flag a number that
+was derivable in a way it does not model. That is the right direction for the error
+to run — a false flag costs a glance, a missed one ships a wrong figure.
+
+| # | Decision | Why |
+|---|---|---|
+| 42 | Groundedness is a **universal check on every eval case**, not one case among fifteen. | The failure is not tied to a question type. It appeared on a late-jobs question and a budget question alike. |
+| 43 | The checker lives in `jobcosting/`, with its own tests, not inside the runner script. | It is a real component with real edge cases; burying it in a script would make it untestable. |
+| 44 | Numbers glued to letters, dots or hyphens are not numbers. | Found by its own test: `J-202551` parsed as `-202551` and was reported as invented. Job numbers are identifiers. |
+
+## M5 decisions — eval set and runner
+
+| # | Decision | Why |
+|---|---|---|
+| 45 | Cases declare `expect_value_sql` / `avoids_value_sql`: ground-truth queries the runner executes. | "Expected behaviour, not an exact string" still allows objective numeric truth. The `avoids` form is how the fan-out figure and the unfiltered change-order total are caught. |
+| 46 | `--dry-run` validates the file and runs every ground-truth query without calling the model. | The eval set can be checked for correctness for free, and a ground-truth query that returns nothing would silently pass a case. A test asserts all of them return a value. |
+| 47 | The runner is tested against **synthetic answers** carrying each known failure. | Otherwise the eval suite is only as trustworthy as the one time someone watched it run. Tests cover the invented denominator, the fan-out figure, a refusal that answered anyway, and a guess where a clarifying question was required. |
+
+### Two refusal cases, not one
+
+`cost_by_region` (region is an employee attribute) and `profit_by_job` — **this model
+has no revenue at all**. Contract value is not revenue recognised, and there are no
+invoices. Profit is not computable, and it is the more tempting question of the two.

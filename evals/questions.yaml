@@ -1,0 +1,188 @@
+# Eval set for the job costing assistant.
+#
+# Each case declares EXPECTED BEHAVIOUR, not an exact answer string: which tables
+# the SQL must touch, how many rows are plausible, what the prose must and must not
+# say, and -- where there is one right number -- a ground-truth query whose value
+# must appear in the answer.
+#
+# One check runs on EVERY case and is not declared per case: numeric groundedness.
+# Every number stated in the prose must be present in, or derivable from, the rows
+# the query returned. See jobcosting/grounding.py.
+#
+# behaviour:
+#   answer   -- give the figure
+#   refuse   -- say the data cannot answer it, and what is missing
+#   clarify  -- ask which reading is meant instead of guessing
+
+cases:
+
+  # ------------------------------------------------------- simple aggregate
+
+  - id: total_cost_by_cost_type
+    category: simple_aggregate
+    question: What is our total cost by cost type?
+    behaviour: answer
+    max_tool_calls: 1
+    sql_references: [fact_job_cost]
+    expect_rows: {min: 4, max: 4}
+    mentions: [material, labour]
+    expect_value_sql: SELECT CAST(sum(CostAmount) AS DECIMAL(18,2)) FROM fact_job_cost
+
+  - id: total_contract_value
+    category: simple_aggregate
+    question: What is the total contract value of all our jobs?
+    behaviour: answer
+    max_tool_calls: 1
+    sql_references: [dim_job]
+    expect_rows: {min: 1, max: 1}
+    expect_value_sql: SELECT CAST(sum(ContractValue) AS DECIMAL(18,2)) FROM dim_job
+
+  # -------------------------------------------------- filter plus aggregate
+
+  - id: labour_cost_total
+    category: filter_aggregate
+    question: How much have we spent on labour?
+    behaviour: answer
+    max_tool_calls: 1
+    sql_references: [fact_job_cost]
+    expect_rows: {min: 1, max: 1}
+    expect_value_sql: >
+      SELECT CAST(sum(CostAmount) AS DECIMAL(18,2)) FROM fact_job_cost
+      WHERE CostType = 'Labour'
+
+  - id: approved_change_order_value
+    category: filter_aggregate
+    question: What is the total value of approved change orders?
+    behaviour: answer
+    max_tool_calls: 1
+    sql_references: [dim_change_order]
+    expect_rows: {min: 1, max: 1}
+    # The trap: Amount includes Pending and Rejected rows unless Status is filtered.
+    expect_value_sql: >
+      SELECT CAST(sum(Amount) AS DECIMAL(18,2)) FROM dim_change_order
+      WHERE Status = 'Approved'
+    avoids_value_sql: SELECT CAST(sum(Amount) AS DECIMAL(18,2)) FROM dim_change_order
+
+  - id: cost_for_one_job
+    category: filter_aggregate
+    question: How much has job J-202505 cost so far?
+    behaviour: answer
+    max_tool_calls: 2
+    sql_references: [fact_job_cost, dim_job]
+    expect_rows: {min: 1, max: 1}
+    expect_value_sql: >
+      SELECT CAST(sum(c.CostAmount) AS DECIMAL(18,2))
+      FROM fact_job_cost c JOIN dim_job j ON j.JobKey = c.JobKey
+      WHERE j.JobNumber = 'J-202505'
+
+  # ------------------------------------------- join across fact and dimension
+
+  - id: cost_by_client
+    category: join
+    question: Which client has cost us the most?
+    behaviour: answer
+    max_tool_calls: 1
+    sql_references: [fact_job_cost, dim_job]
+    expect_rows: {min: 1, max: 11}
+    expect_value_sql: >
+      SELECT CAST(sum(c.CostAmount) AS DECIMAL(18,2)) AS total
+      FROM fact_job_cost c JOIN dim_job j ON j.JobKey = c.JobKey
+      GROUP BY j.ClientName ORDER BY total DESC LIMIT 1
+
+  - id: labour_hours_by_trade
+    category: join
+    question: How many labour hours have we booked by trade?
+    behaviour: answer
+    max_tool_calls: 1
+    sql_references: [fact_job_cost, dim_employee]
+    expect_rows: {min: 1, max: 5}
+    expect_value_sql: >
+      SELECT CAST(sum(Hours) AS DECIMAL(18,2)) FROM fact_job_cost
+      WHERE Hours IS NOT NULL
+
+  - id: cost_by_job_type
+    category: join
+    question: What does each job type cost us on average?
+    behaviour: answer
+    max_tool_calls: 2
+    sql_references: [fact_job_cost, dim_job]
+    expect_rows: {min: 3, max: 3}
+    mentions: [hvac]
+
+  # --------------------------------------------------------- time comparison
+
+  - id: cost_quarter_over_quarter
+    category: time_comparison
+    question: How did our costs in the most recent quarter compare with the quarter before?
+    behaviour: answer
+    max_tool_calls: 2
+    sql_references: [fact_job_cost]
+    expect_rows: {min: 1, max: 12}
+    mentions: [quarter]
+
+  - id: change_orders_by_quarter
+    category: time_comparison
+    question: Are we raising more change orders this year than last year?
+    behaviour: answer
+    max_tool_calls: 2
+    sql_references: [dim_change_order]
+    expect_rows: {min: 1, max: 12}
+
+  # ---------------------------------------------------- required SQL pattern
+
+  - id: budget_vs_actual_by_job
+    category: required_pattern
+    question: Which jobs are over budget, and by how much?
+    behaviour: answer
+    max_tool_calls: 2
+    sql_references: [fact_job_budget, fact_job_cost]
+    expect_rows: {min: 1, max: 500}
+    # The naive direct join inflates budget 66.8x. If this figure shows up, the
+    # prescribed aggregate-then-join pattern was not used.
+    avoids_value_sql: >
+      SELECT CAST(sum(b.BudgetAmount) AS DECIMAL(18,2))
+      FROM fact_job_budget b JOIN fact_job_cost c
+        ON c.JobKey = b.JobKey AND c.CostTypeKey = b.CostTypeKey
+
+  # ------------------------------------------------------- grounding trap
+
+  - id: jobs_finished_late
+    category: grounding
+    question: Which jobs finished late?
+    behaviour: answer
+    max_tool_calls: 2
+    sql_references: [dim_job]
+    expect_rows: {min: 1, max: 52}
+    # This question produced the failure the grounding check exists for: the result
+    # held only the late jobs, and the prose stated a total that was never queried.
+    # The universal grounding check is the assertion; nothing extra is declared.
+
+  # ---------------------------------------------------------------- refusals
+
+  - id: cost_by_region
+    category: refusal
+    question: What is our cost by region?
+    behaviour: refuse
+    max_tool_calls: 1
+    mentions: [region]
+    states_no_money: true
+    # Region lives only on dim_employee and describes the employee, not the job.
+
+  - id: profit_by_job
+    category: refusal
+    question: Which jobs were the most profitable?
+    behaviour: refuse
+    max_tool_calls: 1
+    states_no_money: true
+    # There is no revenue anywhere in this model -- only contract value, budget and
+    # cost. Profit cannot be computed, and ContractValue is not revenue recognised.
+
+  # --------------------------------------------------------------- ambiguous
+
+  - id: biggest_jobs
+    category: ambiguous
+    question: Show me our biggest jobs.
+    behaviour: clarify
+    max_tool_calls: 1
+    # "Biggest" could mean contract value, total cost, budget, or duration, and the
+    # four give different orderings. The model should ask which is meant.
