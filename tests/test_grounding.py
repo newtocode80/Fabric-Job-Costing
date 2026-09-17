@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from jobcosting.agent import ToolCall
-from jobcosting.grounding import check_answer, extract_numbers
+from jobcosting.grounding import check_answer, declared_figures, extract_numbers
 
 
 def call(columns, rows):
@@ -117,3 +117,45 @@ def test_a_standalone_negative_is_still_a_number():
 def test_an_answer_naming_job_numbers_is_grounded():
     late = call(["JobNumber"], [("J-202551",), ("J-202549",)])
     assert check_answer("2 jobs finished late: J-202551 and J-202549.", [late]).ok
+
+
+# ------------------------------------------- declared known issues are supported
+
+def test_the_four_figures_the_owner_named_are_grounded():
+    """These reach the agent in the system prompt so it can caveat its answers."""
+    rows = call(["JobNumber", "cost"], [("J-202501", Decimal("1000.00"))])
+    for caveat in [
+        "16,882.98 of cost cannot be attributed to any job.",
+        "Two rows are duplicated, double-counting $347.30.",
+        "30 cost rows reference jobs that do not exist.",
+        "The orphan keys are 53 to 71.",
+    ]:
+        assert check_answer(caveat, [rows]).ok, caveat
+
+
+def test_a_full_data_quality_caveat_passes():
+    rows = call(["CostType", "total"], [("Material", Decimal("4497901.88"))])
+    answer = (
+        "Material cost is $4,497,901.88. Note that 30 cost rows, worth $16,882.98, "
+        "reference 14 JobKey values that do not exist in the job dimension, so "
+        "job-level totals will not reconcile to this figure."
+    )
+    assert check_answer(answer, [rows]).ok
+
+
+def test_table_row_counts_are_not_declared_figures():
+    """The boundary: a known issue is quoted as a caveat, a row count is computed with."""
+    declared = declared_figures()
+    assert Decimal("52") not in declared      # dim_job rows
+    assert Decimal("10365") not in declared   # fact_job_cost rows
+
+
+def test_the_original_invented_denominator_still_fails():
+    """Widening the supported set must not have blunted the check it exists for."""
+    late = call(["JobNumber"], [(f"J-2025{i:02d}",) for i in range(33)])
+    assert check_answer("33 of 44 jobs finished late.", [late]).ungrounded == [Decimal("44")]
+
+
+def test_all_52_known_jobs_still_fails():
+    result = call(["JobNumber"], [("J-202501",), ("J-202502",)])
+    assert Decimal("52") in check_answer("2 of all 52 known jobs are affected.", [result]).ungrounded

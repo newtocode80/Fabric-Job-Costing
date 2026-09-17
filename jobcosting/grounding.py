@@ -7,18 +7,35 @@ answer says "33 of 44 finished late". The 33 is real. The 44 was never retrieved
 This finds numbers stated in prose that the returned rows cannot support.
 
 It is deliberately CONSERVATIVE about what counts as supported -- cell values,
-row counts, column aggregates, numbers from the question, and percentages of any
-two of those. Anything else is reported for a human to judge, with the offending
-number named. It can therefore flag a number that was in fact derivable in a way
-not modelled here; it reports rather than concludes.
+row counts, column aggregates, numbers from the question, the declared known
+issues, and percentages of any two of those. Anything else is reported for a
+human to judge, with the offending number named. It can therefore flag a number
+that was in fact derivable in a way not modelled here; it reports rather than
+concludes.
+
+Declared known issues count because they are in the system prompt precisely so the
+agent can caveat its answers with them. When the model says that 16,882.98 of cost
+cannot be attributed to any job, it is quoting the declaration, not inventing a
+figure, and rule 6 of the system prompt requires it to.
+
+Table row counts are NOT in that set. "All 52 known jobs" is declared too, but it
+was used as a denominator for a claim about a result, which is the failure this
+check exists to find. The line is what the figure is used FOR: a known issue is
+quoted as a caveat, a row count gets computed into an assertion.
 """
 
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Any, Iterable, Sequence
+
+import yaml
+
+MODEL_PATH = Path(__file__).resolve().parents[1] / "model" / "model.yaml"
 
 # 1,234 | 1234.5 | $4,497,901.88 | 45% | -12
 #
@@ -53,6 +70,41 @@ class Grounding:
             return f"all {len(self.numbers)} numbers grounded"
         listed = ", ".join(_plain(n) for n in self.ungrounded)
         return f"{len(self.ungrounded)} of {len(self.numbers)} not in the result: {listed}"
+
+
+# Permissive on purpose: this reads declarations, not prose. "(53-71)" must yield
+# both endpoints, and a stray match only ever removes a false positive.
+DECLARED_NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def _walk(node: Any):
+    """Every scalar in a nested YAML structure."""
+    if isinstance(node, dict):
+        for value in node.values():
+            yield from _walk(value)
+    elif isinstance(node, (list, tuple)):
+        for value in node:
+            yield from _walk(value)
+    else:
+        yield node
+
+
+@functools.lru_cache(maxsize=4)
+def declared_figures(model_path: Path = MODEL_PATH) -> frozenset[Decimal]:
+    """Figures the model declares as known issues.
+
+    These reach the agent through the system prompt, so quoting one is reading the
+    declaration rather than inventing a number. Scoped to the known-issues section
+    (`data_quality` in model.yaml) and nothing else.
+    """
+    model = yaml.safe_load(Path(model_path).read_text())
+    found: set[Decimal] = set()
+    for scalar in _walk(model.get("data_quality", [])):
+        for token in DECLARED_NUMBER.findall(str(scalar)):
+            value = _to_decimal(token)
+            if value is not None:
+                found.add(value)
+    return frozenset(found)
 
 
 def _plain(value: Decimal) -> str:
@@ -141,8 +193,9 @@ def check_answer(
     answer: str,
     tool_calls: Sequence[Any],
     question: str = "",
+    declared: Iterable[Decimal] | None = None,
 ) -> Grounding:
-    """Find numbers in `answer` that the tool results cannot support."""
+    """Find numbers in `answer` that neither the results nor the model declare."""
     cells: set[Decimal] = set()
     aggregates: set[Decimal] = set()
 
@@ -154,7 +207,8 @@ def check_answer(
         aggregates |= call_aggregates
 
     asked = set(extract_numbers(question))
-    supported = cells | aggregates | asked
+    known = set(declared_figures() if declared is None else declared)
+    supported = cells | aggregates | asked | known
 
     # A percentage may be the ratio of two salient figures rather than a stored
     # value. Only aggregates and question numbers are paired, which keeps this to

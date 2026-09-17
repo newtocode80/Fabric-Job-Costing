@@ -283,3 +283,32 @@ to run — a false flag costs a glance, a missed one ships a wrong figure.
 `cost_by_region` (region is an employee attribute) and `profit_by_job` — **this model
 has no revenue at all**. Contract value is not revenue recognised, and there are no
 invoices. Profit is not computable, and it is the more tempting question of the two.
+
+## Declared known issues are a supported source
+
+The owner ruled: figures declared as known issues are grounded by definition. They
+reach the agent through the system prompt precisely so it can caveat its answers,
+and rule 6 requires it to. Quoting `16,882.98` is reading the declaration, not
+inventing a number.
+
+| # | Decision | Why |
+|---|---|---|
+| 48 | Scoped to the **known-issues section only** (`data_quality` in model.yaml), not all of model.yaml. | Table row counts are declared too, but "all 52 known jobs" was ruled a genuine failure. The line is what a figure is used FOR: a known issue is quoted as a caveat, a row count gets computed into an assertion about a result. |
+| 49 | Extraction from declarations is **permissive** — no identifier lookbehind, so `(53-71)` yields both endpoints. | This reads a declaration, not prose. A stray match here can only remove a false positive, never create one. |
+| 50 | Relationship evidence figures (orphan counts, NULL shares) are **not** included yet. | All four figures the owner named are in `data_quality`, so the tighter scope suffices. Easy to widen if flagged numbers turn out to come from the join warnings. |
+
+Tests pin both sides: the six declared figures ground, and the invented denominator
+and the row-count-as-denominator still fail.
+
+## Replaying a run
+
+`evals/run.py` now saves every answer to `evals/last-run.json`, and `--replay`
+re-scores that file with no model calls.
+
+The checks are what gets iterated on. Without this, every adjustment to the
+groundedness rule costs another 15 live calls to see its effect — which is exactly
+the situation this change was made in. A test asserts a replayed answer scores
+identically to the live one, including that Decimals survive the JSON round trip;
+saved as strings, they would otherwise ground nothing.
+
+`last-run.json` is gitignored: it is output, not a source file.

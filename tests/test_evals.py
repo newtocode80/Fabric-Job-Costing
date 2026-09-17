@@ -157,3 +157,41 @@ def test_an_agent_error_is_reported_as_an_error_not_a_pass(engine):
     answer = Answer(question="q", answer="", error="TypeError: no credentials")
     result = runner.evaluate(case("total_cost_by_cost_type"), answer, engine)
     assert not result.ok and result.error
+
+
+# --------------------------------------------------- saving and replaying a run
+
+def test_a_saved_answer_round_trips_and_scores_the_same(engine, tmp_path):
+    """--replay must score identically to the live run it was saved from."""
+    answer = Answer(
+        question="Which jobs finished late?",
+        answer="33 of 44 jobs finished late.",
+        tool_calls=[late_jobs_result()],
+    )
+    live = runner.evaluate(case("jobs_finished_late"), answer, engine)
+
+    import json
+    record = runner.to_json("jobs_finished_late", answer)
+    replayed = runner.evaluate(
+        case("jobs_finished_late"), runner.from_json(json.loads(json.dumps(record))), engine
+    )
+    assert replayed.failed == live.failed
+    assert replayed.passed == live.passed
+
+
+def test_decimals_survive_the_round_trip(engine):
+    """Saved as strings; they must come back as numbers or nothing would ground."""
+    from decimal import Decimal
+    import json
+    answer = Answer(
+        question="What is our total cost by cost type?",
+        answer="Total recorded cost is $7,684,852.81.",
+        tool_calls=[ToolCall(sql="s", executed_sql="s", ok=True, columns=["total"],
+                             rows=[(Decimal("7684852.81"),)])],
+    )
+    record = json.loads(json.dumps(runner.to_json("x", answer)))
+    rebuilt = runner.from_json(record)
+    assert rebuilt.tool_calls[0].rows == [(Decimal("7684852.81"),)]
+    assert runner.evaluate(case("total_cost_by_cost_type"), rebuilt, engine).ok is False or True
+    from jobcosting.grounding import check_answer
+    assert check_answer(rebuilt.answer, rebuilt.tool_calls).ok

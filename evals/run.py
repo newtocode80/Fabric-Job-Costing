@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """Run the eval set and print a pass/fail table.
 
-    python evals/run.py                  # every case
+    python evals/run.py                  # every case; saves the answers
     python evals/run.py --case refusal   # cases whose id or category matches
     python evals/run.py --dry-run        # validate the file, no model calls
+    python evals/run.py --replay         # re-score the last saved run, no model calls
+
+A live run writes every answer to evals/last-run.json. --replay re-scores that file
+against the current checks, so changing a check does not cost another 15 model
+calls -- which matters, because the checks are what gets iterated on.
 
 Numeric groundedness is checked on every case, not declared per case: every number
 in the prose must be present in, or derivable from, the rows the query returned.
@@ -12,6 +17,7 @@ in the prose must be present in, or derivable from, the rows the query returned.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from dataclasses import dataclass, field
@@ -23,11 +29,12 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from jobcosting.agent import Agent, Answer  # noqa: E402
+from jobcosting.agent import Agent, Answer, ToolCall  # noqa: E402
 from jobcosting.engine import DuckDBEngine  # noqa: E402
 from jobcosting.grounding import check_answer, extract_numbers  # noqa: E402
 
 QUESTIONS = Path(__file__).resolve().parent / "questions.yaml"
+LAST_RUN = Path(__file__).resolve().parent / "last-run.json"
 
 # Phrases that mark a genuine refusal or a genuine clarifying question, rather than
 # an answer that merely hedges.
@@ -140,6 +147,56 @@ def evaluate(case: dict, answer: Answer, engine: DuckDBEngine) -> CaseResult:
     return result
 
 
+def to_json(case_id: str, answer: Answer) -> dict:
+    return {
+        "id": case_id,
+        "question": answer.question,
+        "answer": answer.answer,
+        "error": answer.error,
+        "tool_calls": [
+            {
+                "sql": c.sql, "executed_sql": c.executed_sql, "ok": c.ok,
+                "rejected": c.rejected, "clamped_from": c.clamped_from,
+                "truncated": c.truncated, "columns": list(c.columns),
+                "rows": [[str(v) if isinstance(v, Decimal) else v for v in row] for row in c.rows],
+                "error": c.error,
+            }
+            for c in answer.tool_calls
+        ],
+    }
+
+
+def from_json(record: dict) -> Answer:
+    """Rebuild an Answer from a saved run.
+
+    Numbers come back as strings, so they are parsed to Decimal -- the grounding
+    check compares numerically, and a string would ground nothing.
+    """
+    def value(raw):
+        if isinstance(raw, str):
+            try:
+                return Decimal(raw)
+            except Exception:
+                return raw
+        return raw
+
+    return Answer(
+        question=record["question"],
+        answer=record["answer"] or "",
+        error=record["error"],
+        tool_calls=[
+            ToolCall(
+                sql=c["sql"], executed_sql=c["executed_sql"], ok=c["ok"],
+                rejected=c["rejected"], clamped_from=c["clamped_from"],
+                truncated=c["truncated"], columns=c["columns"],
+                rows=[tuple(value(v) for v in row) for row in c["rows"]],
+                error=c["error"],
+            )
+            for c in record["tool_calls"]
+        ],
+    )
+
+
 def print_table(results: list[CaseResult]) -> None:
     width = max(len(r.id) for r in results)
     print()
@@ -161,6 +218,8 @@ def main() -> int:
     parser.add_argument("--case", help="only ids or categories containing this text")
     parser.add_argument("--dry-run", action="store_true",
                         help="validate the file and the ground-truth SQL; call no model")
+    parser.add_argument("--replay", nargs="?", const=str(LAST_RUN), default=None,
+                        help="re-score a saved run instead of calling the model")
     args = parser.parse_args()
 
     cases = yaml.safe_load(QUESTIONS.read_text())["cases"]
@@ -186,12 +245,33 @@ def main() -> int:
         print(f"{len(cases)} cases validated; every ground-truth query ran.")
         return 0
 
+    if args.replay:
+        path = Path(args.replay)
+        if not path.exists():
+            print(f"{path} does not exist. Run the evals once to create it.", file=sys.stderr)
+            return 1
+        saved = {r["id"]: r for r in json.loads(path.read_text())}
+        missing = [c["id"] for c in cases if c["id"] not in saved]
+        if missing:
+            print(f"not in {path.name}: {', '.join(missing)}", file=sys.stderr)
+        results = [
+            evaluate(case, from_json(saved[case["id"]]), engine)
+            for case in cases if case["id"] in saved
+        ]
+        print(f"replayed {path} -- no model calls", file=sys.stderr)
+        print_table(results)
+        return 0 if all(r.ok for r in results) else 1
+
     agent = Agent(engine=engine)
-    results = []
+    results, records = [], []
     for case in cases:
         print(f"  asking: {case['question']}", file=sys.stderr)
-        results.append(evaluate(case, agent.ask(case["question"]), engine))
+        answer = agent.ask(case["question"])
+        records.append(to_json(case["id"], answer))
+        results.append(evaluate(case, answer, engine))
 
+    LAST_RUN.write_text(json.dumps(records, indent=2))
+    print(f"answers saved to {LAST_RUN}", file=sys.stderr)
     print_table(results)
     return 0 if all(r.ok for r in results) else 1
 
