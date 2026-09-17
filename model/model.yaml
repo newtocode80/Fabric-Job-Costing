@@ -1,0 +1,349 @@
+# Job costing semantic model -- DRAFT, not yet wired into the system prompt.
+#
+# Derived by inspecting the Parquet exports in data/silver/. This model has no
+# TMDL, so this file is the declaration of record: it is the only place the app
+# learns roles, grain, keys and relationships.
+#
+# Every relationship and grain claim below is backed by a measured query. The
+# evidence is in docs/schema-evidence.md. Nothing here is asserted because a
+# column name looked like a key.
+
+model:
+  name: job_costing
+  lakehouse: lh_job_costing
+  schema: silver
+  source: Parquet exports in data/silver/, one file per table
+  row_counts_confirmed_by: model owner, enforced by scripts/verify_exports.py
+
+# Present on all seven tables, single-valued, from the bronze ingest. Never
+# aggregate, filter or group by these -- they carry no business meaning.
+lineage_columns: [_ingested_at, _source_file, _bronze_run_id]
+
+tables:
+
+  - name: dim_job
+    role: dimension
+    grain: one row per job
+    key:
+      columns: [JobKey]
+      unique: true          # 52 distinct JobKey over 52 rows
+    rows: 52
+    columns:
+      JobKey:           {type: INTEGER,   desc: surrogate key}
+      JobNumber:        {type: VARCHAR,   desc: business job number, e.g. J-202503; unique, 52 distinct}
+      JobName:          {type: VARCHAR,   desc: descriptive name; NOT unique -- 27 distinct over 52 jobs}
+      ClientName:       {type: VARCHAR,   desc: customer; 11 distinct. The only client attribute in the model}
+      JobType:          {type: VARCHAR,   desc: HVAC, Electrical, Mechanical}
+      StartDate:        {type: TIMESTAMP, desc: job start; midnight-aligned}
+      ScheduledEndDate: {type: TIMESTAMP, desc: planned completion}
+      ActualEndDate:    {type: TIMESTAMP, desc: actual completion; NULL for 8 jobs -- see data_quality}
+      ContractValue:    {type: DOUBLE,    desc: contracted value. Additive across jobs, but one value per job -- double-counts if a job repeats in the result set}
+      Status:           {type: VARCHAR,   desc: Active (4) or Complete (48)}
+      ProjectManager:   {type: VARCHAR,   desc: 4 distinct}
+      HasDateDefect:    {type: BOOLEAN,   desc: upstream data-quality flag. True for exactly the 4 jobs marked Complete with a NULL ActualEndDate}
+
+  - name: dim_cost_type
+    role: dimension
+    grain: one row per cost type
+    key:
+      columns: [CostTypeKey]
+      unique: true          # 4 distinct over 4 rows
+    rows: 4
+    columns:
+      CostTypeKey:  {type: VARCHAR, desc: "surrogate key stored as TEXT ('1'..'4') -- both facts store it as INTEGER. Joins need a cast"}
+      CostType:     {type: VARCHAR, desc: Labour, Material, Subcontractor, Equipment}
+      CostCategory: {type: VARCHAR, desc: "Direct (Labour, Material, Subcontractor) or Indirect (Equipment)"}
+
+  - name: dim_employee
+    role: dimension
+    grain: one row per employee
+    key:
+      columns: [EmployeeKey]
+      unique: true          # 45 distinct over 45 rows
+    rows: 45
+    columns:
+      EmployeeKey:  {type: INTEGER, desc: surrogate key}
+      EmployeeName: {type: VARCHAR, desc: "NOT unique -- 42 distinct over 45 employees. Three names are each shared by two different employees, so grouping by name merges different people. Group by EmployeeKey"}
+      Trade:        {type: VARCHAR, desc: Apprentice, Foreman, Pipefitter and 2 others}
+      HourlyRate:   {type: DOUBLE,  desc: "standard rate on the employee record. NOT the rate a cost row was charged at -- fact_job_cost stores CostAmount directly and the two need not agree"}
+      Region:       {type: VARCHAR, desc: "North, Central, South. The only region attribute in the model; there is no region dimension and no region on any job"}
+
+  - name: dim_date
+    role: dimension
+    grain: one row per calendar day
+    key:
+      columns: [DateKey]
+      unique: true          # 669 distinct over 669 rows; Date is equally unique
+    rows: 669
+    coverage: 2024-10-01 to 2026-07-31, contiguous -- 669 rows across 669 calendar days, no gaps
+    columns:
+      DateKey:       {type: VARCHAR, desc: "YYYYMMDD as TEXT. Verified to match Date on every row"}
+      Date:          {type: VARCHAR, desc: "YYYY-MM-DD as TEXT, not a DATE. Cast before comparing to a fact date"}
+      Year:          {type: VARCHAR, desc: 2024-2026}
+      Quarter:       {type: VARCHAR, desc: "1-4, calendar"}
+      MonthNumber:   {type: VARCHAR, desc: "1-12 stored as TEXT -- sorts 1,10,11,12,2,3... Cast to INTEGER to order by it"}
+      MonthName:     {type: VARCHAR, desc: full month name}
+      WeekOfYear:    {type: VARCHAR, desc: 1-52}
+      DayOfWeek:     {type: VARCHAR, desc: 1-7}
+      IsWeekend:     {type: VARCHAR, desc: "the strings 'True'/'False', not a boolean"}
+      FiscalYear:    {type: VARCHAR, desc: "fiscal year starting in July -- July 2025 is FiscalYear 2026"}
+      FiscalQuarter: {type: VARCHAR, desc: "1-4, fiscal (Q1 = Jul-Sep)"}
+    notes:
+      - Every attribute is stored as TEXT, including the numeric ones. Cast before
+        ordering or doing arithmetic.
+
+  - name: dim_change_order
+    role: fact                      # despite the dim_ prefix -- see note
+    grain: one row per change order
+    key:
+      columns: [ChangeOrderKey]
+      unique: true          # 26 distinct over 26 rows
+    rows: 26
+    columns:
+      ChangeOrderKey: {type: INTEGER,   desc: surrogate key}
+      JobKey:         {type: INTEGER,   desc: foreign key to dim_job}
+      DateSubmitted:  {type: TIMESTAMP, desc: submitted date; populated on all 26}
+      DateApproved:   {type: TIMESTAMP, desc: "approval date; populated on exactly the 7 Approved rows, NULL on all Pending and Rejected"}
+      Amount:         {type: DOUBLE,    desc: "change order value. Additive. Includes Pending and Rejected rows -- filter on Status to get approved value only"}
+      Status:         {type: VARCHAR,   desc: "Approved (7), Pending (11), Rejected (8)"}
+    notes:
+      - "Named dim_ but behaves as a transaction fact: a foreign key to dim_job, an additive Amount, and an event date. Treated as a fact here. The name is the source's, and is left unchanged."
+      - 30 of the 52 jobs have no change order. At most 3 per job.
+
+  - name: fact_job_budget
+    role: fact
+    grain: one row per job per cost type
+    key:
+      columns: [JobKey, CostTypeKey]
+      unique: true          # 196 distinct pairs over 196 rows -- PROVEN
+    rows: 196
+    columns:
+      JobKey:       {type: INTEGER, desc: foreign key to dim_job}
+      CostTypeKey:  {type: INTEGER, desc: "foreign key to dim_cost_type, which stores the key as TEXT -- cast to join"}
+      BudgetAmount: {type: DOUBLE,  desc: budgeted cost. Additive}
+      BudgetHours:  {type: DOUBLE,  desc: "budgeted hours. Populated ONLY for CostTypeKey 1 (Labour); exactly 0.0 on all 147 Material, Subcontractor and Equipment rows. Summing it across cost types is meaningless"}
+    notes:
+      - "Complete cross product: 49 jobs x 4 cost types = 196 rows, every combination present."
+      - Has NO date column. The budget is not time-phased, so it cannot be split by
+        period or compared to actuals within a month or quarter.
+      - 3 of the 52 jobs have no budget row at all (JobKey 19, 36, 45).
+
+  - name: fact_job_cost
+    role: fact
+    grain: one row per cost transaction
+    key:
+      columns: [CostID]
+      unique: false         # 10,363 distinct over 10,365 rows -- VIOLATED, see data_quality
+      working_key: [CostID, EmployeeKey]   # unique over all 10,365 rows
+    rows: 10365
+    columns:
+      CostID:       {type: INTEGER,   desc: "intended transaction key. NOT unique -- two values repeat. Do not COUNT DISTINCT on it to count transactions"}
+      JobKey:       {type: INTEGER,   desc: "foreign key to dim_job. 14 values are absent from dim_job -- see data_quality"}
+      CostDate:     {type: TIMESTAMP, desc: date the cost was incurred; midnight-aligned on every row}
+      CostTypeKey:  {type: INTEGER,   desc: "foreign key to dim_cost_type, which stores the key as TEXT -- cast to join"}
+      CostTypeRaw:  {type: VARCHAR,   desc: "uncleaned source label, 16 spelling and casing variants ('LAB', 'Labor', 'labour ' with a trailing space, 'sub-contractor', ...). Never group by this -- use CostType or join dim_cost_type"}
+      EmployeeKey:  {type: DOUBLE,    desc: "foreign key to dim_employee, stored as DOUBLE because it is NULL on 5,728 of 10,365 rows. All non-null values are whole numbers. NULL on every non-Labour row by design, plus 40 Labour rows"}
+      Hours:        {type: DOUBLE,    desc: "hours worked. NULL on 5,782 rows -- populated for Labour only. Additive within Labour"}
+      CostAmount:   {type: DOUBLE,    desc: actual cost incurred. Fully additive, never NULL}
+      SourceSystem: {type: VARCHAR,   desc: "ERP (6,279), FIELD_APP (2,590), LEGACY (1,496). All three carry all 16 raw spelling variants, so source does not predict cleanliness"}
+      CostType:     {type: VARCHAR,   desc: "cleaned cost type, denormalised onto the fact. Verified to agree with dim_cost_type.CostType on every row, so joining the dimension is optional unless CostCategory is needed"}
+    notes:
+      - The only table with a real transaction grain, and the only source of actual
+        cost.
+
+# Every relationship is many-to-one with the fact on the many side. Each was
+# confirmed by measuring key uniqueness on the one side and counting orphans on
+# both. Full evidence: docs/schema-evidence.md
+relationships:
+
+  - from: {table: fact_job_cost, column: JobKey}
+    to:   {table: dim_job, column: JobKey}
+    cardinality: many-to-one
+    join: fact_job_cost.JobKey = dim_job.JobKey
+    evidence:
+      one_side_unique: true               # 52 distinct JobKey over 52 rows
+      orphan_fact_rows: 30                # of 10,365 (0.29%)
+      orphan_fact_keys: [53, 54, 55, 56, 57, 59, 60, 62, 65, 66, 67, 68, 69, 71]
+      orphan_fact_amount: 16882.98        # of 7,684,852.81 (0.22%)
+      unreferenced_dimension_rows: 0      # all 52 jobs have cost
+    warning: >
+      An inner join to dim_job silently drops 30 cost rows worth 16,882.98.
+      Totals by job will not reconcile to the unfiltered total.
+
+  - from: {table: fact_job_cost, column: CostTypeKey}
+    to:   {table: dim_cost_type, column: CostTypeKey}
+    cardinality: many-to-one
+    join: CAST(fact_job_cost.CostTypeKey AS VARCHAR) = dim_cost_type.CostTypeKey
+    requires_cast: INTEGER on the fact, VARCHAR on the dimension
+    evidence:
+      one_side_unique: true               # 4 distinct over 4 rows
+      orphan_fact_rows: 0
+      unreferenced_dimension_rows: 0      # all 4 cost types used
+    warning: Without the cast the join raises a type error or returns nothing.
+
+  - from: {table: fact_job_cost, column: EmployeeKey}
+    to:   {table: dim_employee, column: EmployeeKey}
+    cardinality: many-to-one
+    optional: true
+    join: CAST(fact_job_cost.EmployeeKey AS INTEGER) = dim_employee.EmployeeKey
+    requires_cast: DOUBLE on the fact, INTEGER on the dimension
+    evidence:
+      one_side_unique: true               # 45 distinct over 45 rows
+      fact_rows_with_key: 4637            # of 10,365
+      fact_rows_null_key: 5728            # 55.3%, non-Labour rows plus 40 Labour rows
+      orphan_fact_rows: 0                 # of the 4,637 non-null
+      unreferenced_dimension_rows: 0      # all 45 employees appear
+    warning: >
+      Over half the fact has no employee. An inner join keeps only 4,637 rows and
+      45% of cost disappears. Use a LEFT JOIN unless the question is about labour.
+
+  - from: {table: fact_job_cost, column: CostDate}
+    to:   {table: dim_date, column: Date}
+    cardinality: many-to-one
+    join: CAST(fact_job_cost.CostDate AS DATE) = CAST(dim_date.Date AS DATE)
+    requires_cast: TIMESTAMP on the fact, VARCHAR on the dimension
+    evidence:
+      one_side_unique: true               # 669 distinct over 669 rows
+      orphan_fact_rows: 85                # of 10,365, across 41 distinct dates
+      orphan_date_range: 2026-08-01 to 2026-09-24
+      unreferenced_dimension_rows: 19     # days with no cost activity, expected
+    warning: >
+      dim_date stops at 2026-07-31 but cost runs to 2026-09-24. An inner join
+      drops the most recent 85 rows, so "latest activity" and any trailing-period
+      question answered through dim_date will be wrong. Filter on CostDate
+      directly unless a fiscal or calendar attribute is actually needed.
+
+  - from: {table: fact_job_budget, column: JobKey}
+    to:   {table: dim_job, column: JobKey}
+    cardinality: many-to-one
+    join: fact_job_budget.JobKey = dim_job.JobKey
+    evidence:
+      one_side_unique: true
+      orphan_fact_rows: 0
+      unreferenced_dimension_rows: 3      # JobKey 19, 36, 45 have no budget
+    warning: 3 jobs have no budget. A budget-vs-actual report must LEFT JOIN from
+      the job or those jobs vanish.
+
+  - from: {table: fact_job_budget, column: CostTypeKey}
+    to:   {table: dim_cost_type, column: CostTypeKey}
+    cardinality: many-to-one
+    join: CAST(fact_job_budget.CostTypeKey AS VARCHAR) = dim_cost_type.CostTypeKey
+    requires_cast: INTEGER on the fact, VARCHAR on the dimension
+    evidence:
+      one_side_unique: true
+      orphan_fact_rows: 0
+      unreferenced_dimension_rows: 0
+
+  - from: {table: dim_change_order, column: JobKey}
+    to:   {table: dim_job, column: JobKey}
+    cardinality: many-to-one
+    join: dim_change_order.JobKey = dim_job.JobKey
+    evidence:
+      one_side_unique: true
+      orphan_fact_rows: 0
+      unreferenced_dimension_rows: 30     # 30 of 52 jobs have no change order
+
+# Joins the data would support but that are NOT declared, because whether they are
+# intended is the model owner's call, not something the data can settle.
+undeclared_candidates:
+
+  - tables: [dim_job, dim_date]
+    columns: [StartDate, ScheduledEndDate, ActualEndDate]
+    finding: >
+      Three date columns, so dim_date would be a role-playing dimension with three
+      separate joins, not one. Containment is near-total but imperfect:
+      StartDate 0 orphans of 52, ScheduledEndDate 2 orphans, ActualEndDate 1 orphan
+      (all falling past dim_date's 2026-07-31 end). Which role is the default is a
+      modelling decision. Not declared.
+
+  - tables: [dim_change_order, dim_date]
+    columns: [DateSubmitted, DateApproved]
+    finding: >
+      Both are fully contained in dim_date -- DateSubmitted 26 of 26 with 0 orphans,
+      DateApproved 7 of 7 with 0 orphans. Again two roles, so it would be two
+      relationships. Clean, but which is intended is not visible in the data.
+      Not declared.
+
+  - tables: [fact_job_budget, fact_job_cost]
+    finding: >
+      Budget and actual meet only through the shared dim_job and dim_cost_type
+      keys, not through a relationship. Aggregate each side to JobKey x CostTypeKey
+      separately and join the aggregates -- joining the two facts directly fans out
+      196 budget rows against 10,365 cost rows and inflates both totals.
+      49 jobs have both; 17 JobKeys have cost but no budget (14 of those are the
+      orphan keys absent from dim_job).
+
+  - tables: [dim_employee, dim_job]
+    finding: >
+      dim_employee.Region is the only region attribute in the model. Nothing
+      connects it to a job, so "cost by region" can only mean the region of the
+      employee who booked the labour, which covers 45% of rows and no material,
+      subcontractor or equipment cost at all. There is no region dimension.
+      Not declared.
+
+data_quality:
+
+  - id: DQ1
+    severity: high
+    table: fact_job_cost
+    finding: >
+      CostID is not unique. CostID 807 and CostID 3224 each appear twice. Within
+      each pair every column matches except EmployeeKey, which is populated on one
+      row and NULL on the other -- the signature of a failed merge upstream, not a
+      true repeated transaction.
+    impact: >
+      COUNT(DISTINCT CostID) undercounts by 2. Both copies carry the same
+      CostAmount, so SUM(CostAmount) double-counts 347.30. The table has no valid
+      single-column key.
+
+  - id: DQ2
+    severity: high
+    table: fact_job_cost
+    finding: >
+      14 JobKey values (53-71) appear in 30 cost rows but do not exist in dim_job.
+      The fact references jobs the dimension has never heard of.
+    impact: >
+      16,882.98 of cost cannot be attributed to any job. Job-level totals and the
+      grand total disagree by that amount depending on the join type.
+
+  - id: DQ3
+    severity: high
+    table: dim_date
+    finding: >
+      dim_date ends 2026-07-31. fact_job_cost runs to 2026-09-24. 85 cost rows on
+      41 dates have no matching date row.
+    impact: Any question answered through dim_date silently omits the last two
+      months of activity.
+
+  - id: DQ4
+    severity: medium
+    table: dim_job
+    finding: >
+      4 jobs are marked Status = 'Complete' with a NULL ActualEndDate
+      (JobKey 16, 21, 25, 37). These are exactly the 4 rows where HasDateDefect is
+      True -- the flag is already computed upstream and means precisely this.
+    impact: Duration and on-time analysis must exclude them or treat them as open.
+
+  - id: DQ5
+    severity: medium
+    table: dim_employee
+    finding: >
+      EmployeeName is not unique. 'Chantal Gagnon' (keys 5, 27), 'Chantal Roy'
+      (18, 34) and 'Luc Girard' (3, 29) are each two different employees.
+    impact: Grouping by name merges distinct people. Group by EmployeeKey.
+
+  - id: DQ6
+    severity: low
+    table: fact_job_cost
+    finding: >
+      CostTypeRaw holds 16 variants of 4 real values, including case differences,
+      abbreviations and a trailing space ('labour ').
+    impact: >
+      None if CostTypeKey or CostType is used -- both are clean and CostType agrees
+      with the dimension on every row. CostTypeRaw is kept only as an audit trail.
+
+  - id: DQ7
+    severity: low
+    table: fact_job_budget
+    finding: BudgetHours is 0.0 on all 147 non-Labour rows rather than NULL.
+    impact: Averaging BudgetHours across cost types is dragged toward zero.

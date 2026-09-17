@@ -16,7 +16,7 @@ These rows are SYNTHETIC. They stand in for real exports of the
 rest of the app can be built and demonstrated. Every number here is made up.
 
 The generator is seeded, so repeated runs produce byte-identical output. Column
-names, types and referential integrity follow docs/data-dictionary.md:
+names, types and referential integrity follow docs/archive/operations-intelligence-data-dictionary.md:
 
     silver_customers  -> DimCustomer    one row per customer
     silver_jobs       -> FactJobs       one row per job          (hub)
@@ -316,7 +316,7 @@ def build_targets(rng: random.Random) -> list[dict]:
 
 
 # Explicit Arrow schemas: string -> VARCHAR, dateTime -> TIMESTAMP, double -> DOUBLE,
-# matching the data types in docs/data-dictionary.md.
+# matching the data types in docs/archive/operations-intelligence-data-dictionary.md.
 _TS = pa.timestamp("us")
 SCHEMAS: dict[str, pa.Schema] = {
     "silver_customers": pa.schema(

@@ -1,3 +1,17 @@
+> **ARCHIVED — NOT THIS PROJECT.**
+>
+> This document describes the **`lh_operations_intelligence`** semantic model, which
+> lives in a **separate workspace**. It does **not** describe the job costing model
+> this repository is built against.
+>
+> This project targets **`lh_job_costing`**, schema `silver` — a seven-table star
+> schema with no TMDL. Its schema is declared in **`model/model.yaml`**, derived by
+> inspecting the Parquet exports in `data/silver/`.
+>
+> Nothing below is authoritative here. Kept for reference only.
+
+---
+
 # Job Costing Semantic Model — Data Dictionary
 
 **Source lakehouse:** `lh_operations_intelligence`

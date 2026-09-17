@@ -28,21 +28,24 @@ becomes the derived artifact injected into the system prompt.
 | # | Instruction | Applies at | Status |
 |---|---|---|---|
 | 1 | Declare **only relationships the data gives evidence for**. Report gaps; do not fill them. | M2 | Active |
-| 2 | Show the `model/model.yaml` **draft for review before wiring it into the prompt**. | M2 | Active |
-| 3 | README must state that `docs/data-dictionary.md` is a generated artifact, not a source of truth; the TMDL is ground truth. | M6 | **Superseded** — see below |
+| 2 | Show the `model/model.yaml` **draft for review before wiring it into the prompt**. | M2 | Active — draft written, **awaiting sign-off**, not wired in |
+| 5 | For every declared relationship, show join keys, observed cardinality and orphan counts on both sides. | M2 | Done — `scripts/verify_model.py` |
+| 6 | Declare each fact's grain explicitly and **prove** the candidate key is unique in the data. | M2 | Done — one proof failed, reported as DQ1, not smoothed over |
+| 3 | README must state that the data dictionary is a generated artifact, not a source of truth; the TMDL is ground truth. | M6 | **Superseded** — see below |
 | 4 | Flag any relationship the dictionary claims that the TMDL does not define. | M2 | **Superseded** — see below |
 
 Instructions 3 and 4 were issued when the project was believed to target
 `lh_operations_intelligence`. That model has a TMDL and a dictionary; this one has
 neither. The *principle* behind instruction 4 survives as instruction 1.
 
-### Open question for the owner
+### The archived dictionary
 
-`docs/data-dictionary.md` documents the five-table `lh_operations_intelligence`
-model — **a separate project**. It is still the only committed schema description in
-the repo, so it is a live trip hazard for anyone reading it as authoritative.
-Awaiting a decision: delete it, move it under `docs/archive/` with a header naming
-the other project, or leave it as is. Untouched until then.
+The five-table dictionary that used to sit at `docs/data-dictionary.md` documents the
+`lh_operations_intelligence` model in a **separate workspace**. It was moved to
+`docs/archive/operations-intelligence-data-dictionary.md` and given a header saying
+so, on the owner's instruction, because leaving it at the top of `docs/` invited
+reading it as this project's schema. It is reference material and is authoritative
+for nothing here.
 
 ## Retired: the fixture generator
 
@@ -55,7 +58,8 @@ between blocking and generating stand-in data, the owner chose synthetic fixture
 so M1–M6 could proceed.
 
 **Why it was replaced.** It was built against the wrong model — the five-table
-`lh_operations_intelligence` schema described in `docs/data-dictionary.md`. The app
+`lh_operations_intelligence` schema described in
+`docs/archive/operations-intelligence-data-dictionary.md`. The app
 targets the seven-table `lh_job_costing` star schema, and real exports of it now
 exist. Nothing the generator produces is relevant to that model.
 
@@ -71,3 +75,14 @@ opens with the retirement notice.
 | 2 | Relation names are the **Parquet file stems**. | File names are already the model's table names, so the M0 entity-to-table mapping collapsed to discovery. One less place for names to drift. |
 | 3 | Confirmed row counts live in `load_duckdb.EXPECTED_ROWS` and are checked by `scripts/verify_exports.py`. | A truncated or stale export should fail loudly rather than quietly change every answer the agent gives. |
 | 4 | `data/silver/` is **tracked**; only `data/generated/` is ignored. | The real exports are the model's data and belong in history. |
+
+## M2 — deriving model.yaml without a TMDL
+
+| # | Decision | Why |
+|---|---|---|
+| 5 | `model/model.yaml` is the **declaration of record**. With no TMDL there is no upstream truth to derive from, so this file is authored once and then defended by tests, rather than regenerated. | A generated file with no source to generate from would be a fiction. Making it hand-authored but machine-checked puts the honesty in the verifier. |
+| 6 | `scripts/verify_model.py` **re-measures every claim** in model.yaml against the data and exits non-zero on disagreement. | The declaration cannot quietly drift from the exports. Refreshing an export re-runs the proof. |
+| 7 | `dim_change_order` is declared **role: fact** despite its `dim_` prefix. Its source name is left unchanged. | It has a foreign key to `dim_job`, an additive `Amount` and an event date — a transaction fact by behaviour. Renaming it would break the match to the source table. |
+| 8 | `fact_job_cost.CostID` is declared `unique: false` with a separate `working_key`, rather than picking a key that happens to work. | `CostID` is the intended key and it is violated. Declaring it clean would hide DQ1; declaring a different key would hide that the intended one is broken. |
+| 9 | Four joins the data would support are listed under `undeclared_candidates` instead of `relationships`. | Each is a modelling decision the data cannot settle — role-playing date joins where more than one date column qualifies, and a region attribute with no path to a job. Owner's call. |
+| 10 | Casts are written into each relationship's `join` clause, and the verifier runs that exact clause. | Three of the seven joins need a cast. Testing a reconstructed join would prove something other than what the app issues. |
