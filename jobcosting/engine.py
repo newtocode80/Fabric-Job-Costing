@@ -59,6 +59,10 @@ class DuckDBEngine:
     ) -> None:
         self.data_dir = data_dir
         self.timeout_seconds = timeout_seconds
+        # One DuckDB connection is not safe to use from several threads at once,
+        # and the API serves sync endpoints from a threadpool. Queries are
+        # serialised; the timeout keeps any one of them from holding the lock.
+        self._lock = threading.Lock()
         paths = sorted(data_dir.glob("*.parquet"))
         if not paths:
             raise FileNotFoundError(f"No Parquet exports found in {data_dir}")
@@ -79,20 +83,21 @@ class DuckDBEngine:
         the thread running the query, and the connection stays usable afterwards --
         one slow question must not break the next one.
         """
-        timer = threading.Timer(self.timeout_seconds, self._con.interrupt)
-        timer.start()
-        try:
-            cursor = self._con.execute(sql)
-            rows = cursor.fetchall()
-        except duckdb.InterruptException as exc:
-            raise TimeoutError(
-                f"The query ran longer than {self.timeout_seconds} seconds and was "
-                f"stopped. Narrow it with a WHERE clause, aggregate instead of "
-                f"returning detail rows, or query fewer tables at once."
-            ) from exc
-        finally:
-            timer.cancel()
-        columns = [d[0] for d in cursor.description] if cursor.description else []
+        with self._lock:
+            timer = threading.Timer(self.timeout_seconds, self._con.interrupt)
+            timer.start()
+            try:
+                cursor = self._con.execute(sql)
+                rows = cursor.fetchall()
+            except duckdb.InterruptException as exc:
+                raise TimeoutError(
+                    f"The query ran longer than {self.timeout_seconds} seconds and "
+                    f"was stopped. Narrow it with a WHERE clause, aggregate instead "
+                    f"of returning detail rows, or query fewer tables at once."
+                ) from exc
+            finally:
+                timer.cancel()
+            columns = [d[0] for d in cursor.description] if cursor.description else []
         return QueryResult(columns=columns, rows=rows)
 
     def close(self) -> None:

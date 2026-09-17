@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Costing Query Assistant</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Job Costing Query Assistant</h1>
+    <p class="subtitle">Ask about jobs, costs, budgets and change orders. Every answer shows the SQL that produced it.</p>
+  </header>
+
+  <form id="ask">
+    <input id="question" name="question" autocomplete="off" autofocus
+           placeholder="What is our total cost by cost type?">
+    <button type="submit" id="submit">Ask</button>
+  </form>
+
+  <div class="examples">
+    Try:
+    <button type="button" class="example">Total cost by cost type</button>
+    <button type="button" class="example">Budget vs actual by job</button>
+    <button type="button" class="example">Which jobs finished late?</button>
+    <button type="button" class="example">What is our cost by region?</button>
+  </div>
+
+  <p id="status" hidden></p>
+  <div id="answer"></div>
+  <div id="notice"></div>
+
+  <details id="detail" hidden>
+    <summary id="summary">SQL and returned rows</summary>
+    <div class="panel" id="panel"></div>
+  </details>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

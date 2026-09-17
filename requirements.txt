@@ -3,4 +3,7 @@ pyarrow==25.0.1
 PyYAML==6.0.1
 anthropic==1.6.0
 sqlglot==30.18.0
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
 pytest==9.1.1
+httpx==0.29.0

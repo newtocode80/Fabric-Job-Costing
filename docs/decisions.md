@@ -226,3 +226,20 @@ not be silent.
 
 `ToolCall` records `sql` (as written), `executed_sql` (as run) and `clamped_from`, and
 the CLI prints the clamp explicitly rather than showing only the wrapped query.
+
+## M4 decisions — API and page
+
+| # | Decision | Why |
+|---|---|---|
+| 35 | The FastAPI instance is named `main` in `app.py`. | The spec says `uvicorn app:main` runs it. That is `module:attribute`, so the app object has to be called `main` — unusual, but it is what was asked for. |
+| 36 | `DuckDBEngine.run` now takes a lock. | FastAPI serves sync endpoints from a threadpool, and one DuckDB connection is not safe across threads. Queries are serialised; the 10s timeout stops any one of them holding the lock. |
+| 37 | `Decimal` is serialised as a **string**, not a float. | Money is cast to `DECIMAL(18,2)` precisely so it prints exactly. A float round-trip would put `.81000002` straight back. A test asserts this. |
+| 38 | The page builds every node with `document.createElement` and `textContent`. | Answers, SQL and row values all originate outside the page. Nothing from the API is ever interpreted as markup. |
+| 39 | The panel shows `executed_sql`, with the clamp called out separately. | The panel must show the query that produced the rows. When a clamp wrapped it, a flag says so rather than leaving a reader to spot the wrapper. |
+| 40 | Table values are shown exactly as returned — no thousands separators. | The panel's job is to show what the query returned. Formatting there would diverge from the data; formatting belongs in the prose answer. Numerics are right-aligned in a monospace column instead. |
+| 41 | Body text 18px, answer 21.6px, one accent (`#1b5e9c`), system font stack. | Readable from the back of a room. No gradients, no chat bubbles, no typing animation, per the spec. |
+
+**Bug found by running it, not by review:** `renderTable` used
+`table.append(el("thead")).firstChild`, but `Node.append()` returns `undefined`, so
+the call threw and the panel never opened. Only launching the page and watching the
+console caught it — `TestClient` never executes the JavaScript.
