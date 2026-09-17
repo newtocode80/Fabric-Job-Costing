@@ -1,0 +1,7 @@
+# Generated fixture / exported data -- never committed.
+data/
+
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
