@@ -195,3 +195,77 @@ def test_decimals_survive_the_round_trip(engine):
     assert runner.evaluate(case("total_cost_by_cost_type"), rebuilt, engine).ok is False or True
     from jobcosting.grounding import check_answer
     assert check_answer(rebuilt.answer, rebuilt.tool_calls).ok
+
+
+# ------------------------------------- saving must survive anything the run does
+
+def late_jobs_with_dates() -> ToolCall:
+    """The result shape that crashed a completed run: it contains dates."""
+    import datetime as dt
+    from decimal import Decimal
+    return ToolCall(
+        sql="SELECT JobNumber, ActualEndDate, CAST(ActualEndDate AS DATE), ContractValue "
+            "FROM dim_job WHERE ActualEndDate > ScheduledEndDate",
+        executed_sql="... LIMIT 500", ok=True,
+        columns=["JobNumber", "ActualEndDate", "end_date", "value"],
+        rows=[
+            ("J-202509", dt.datetime(2026, 4, 24), dt.date(2026, 4, 24), Decimal("179000.00")),
+            ("J-202524", dt.datetime(2025, 12, 24), dt.date(2025, 12, 24), Decimal("80000.00")),
+        ],
+    )
+
+
+def test_an_answer_containing_dates_saves_and_replays(engine, tmp_path):
+    """The exact regression: date is not JSON serialisable, and the run was lost."""
+    import json
+    answer = Answer(
+        question="Which jobs finished late?",
+        answer="2 jobs finished late: J-202509 and J-202524.",
+        tool_calls=[late_jobs_with_dates()],
+    )
+    record = runner.to_json("jobs_finished_late", answer)
+
+    path = tmp_path / "run.json"
+    runner.save([record], path)                       # must not raise
+    assert path.exists()
+
+    rebuilt = runner.from_json(json.loads(path.read_text())[0])
+    assert rebuilt.tool_calls[0].rows == answer.tool_calls[0].rows   # types preserved
+    assert (runner.evaluate(case("jobs_finished_late"), rebuilt, engine).failed
+            == runner.evaluate(case("jobs_finished_late"), answer, engine).failed)
+
+
+def test_save_never_raises_even_when_it_cannot_write(tmp_path, capsys):
+    """A failure to save must warn, not abort a run that has already made calls."""
+    runner.save([{"id": "x"}], tmp_path / "no-such-dir" / "run.json")
+    assert "warning" in capsys.readouterr().err
+
+
+def test_a_run_saves_after_every_case_not_only_at_the_end(monkeypatch, tmp_path, engine):
+    """A crash part-way through must leave the completed answers on disk."""
+    import json
+    path = tmp_path / "run.json"
+    monkeypatch.setattr(runner, "LAST_RUN", path)
+
+    asked = []
+    seen_on_disk = []
+
+    class StubAgent:
+        def __init__(self, **kwargs):
+            pass
+
+        def ask(self, question):
+            asked.append(question)
+            # What the file holds at the moment this call starts.
+            seen_on_disk.append(len(json.loads(path.read_text())) if path.exists() else 0)
+            return Answer(question=question, answer="2 rows.",
+                          tool_calls=[late_jobs_with_dates()])
+
+    monkeypatch.setattr(runner, "Agent", StubAgent)
+    monkeypatch.setattr("sys.argv", ["run.py", "--case", "aggregate"])
+    runner.main()
+
+    assert len(asked) >= 3
+    # Before the Nth question, N-1 answers are already saved.
+    assert seen_on_disk == list(range(len(asked)))
+    assert len(json.loads(path.read_text())) == len(asked)

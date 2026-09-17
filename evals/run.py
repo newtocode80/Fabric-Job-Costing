@@ -32,6 +32,7 @@ sys.path.insert(0, str(ROOT))
 from jobcosting.agent import Agent, Answer, ToolCall  # noqa: E402
 from jobcosting.engine import DuckDBEngine  # noqa: E402
 from jobcosting.grounding import check_answer, extract_numbers  # noqa: E402
+from jobcosting.serialisation import decode_rows, encode_rows  # noqa: E402
 
 QUESTIONS = Path(__file__).resolve().parent / "questions.yaml"
 LAST_RUN = Path(__file__).resolve().parent / "last-run.json"
@@ -148,6 +149,7 @@ def evaluate(case: dict, answer: Answer, engine: DuckDBEngine) -> CaseResult:
 
 
 def to_json(case_id: str, answer: Answer) -> dict:
+    """A saved answer. Values are encoded losslessly so a replay scores the same."""
     return {
         "id": case_id,
         "question": answer.question,
@@ -158,7 +160,7 @@ def to_json(case_id: str, answer: Answer) -> dict:
                 "sql": c.sql, "executed_sql": c.executed_sql, "ok": c.ok,
                 "rejected": c.rejected, "clamped_from": c.clamped_from,
                 "truncated": c.truncated, "columns": list(c.columns),
-                "rows": [[str(v) if isinstance(v, Decimal) else v for v in row] for row in c.rows],
+                "rows": encode_rows(c.rows),
                 "error": c.error,
             }
             for c in answer.tool_calls
@@ -167,19 +169,7 @@ def to_json(case_id: str, answer: Answer) -> dict:
 
 
 def from_json(record: dict) -> Answer:
-    """Rebuild an Answer from a saved run.
-
-    Numbers come back as strings, so they are parsed to Decimal -- the grounding
-    check compares numerically, and a string would ground nothing.
-    """
-    def value(raw):
-        if isinstance(raw, str):
-            try:
-                return Decimal(raw)
-            except Exception:
-                return raw
-        return raw
-
+    """Rebuild an Answer from a saved run, types and all."""
     return Answer(
         question=record["question"],
         answer=record["answer"] or "",
@@ -189,12 +179,32 @@ def from_json(record: dict) -> Answer:
                 sql=c["sql"], executed_sql=c["executed_sql"], ok=c["ok"],
                 rejected=c["rejected"], clamped_from=c["clamped_from"],
                 truncated=c["truncated"], columns=c["columns"],
-                rows=[tuple(value(v) for v in row) for row in c["rows"]],
+                rows=decode_rows(c["rows"]),
                 error=c["error"],
             )
             for c in record["tool_calls"]
         ],
     )
+
+
+def save(records: list[dict], path: Path | None = None) -> None:
+    """Persist what has been answered so far. Never raises.
+
+    Called after every case, not once at the end. A run is fifteen model calls;
+    losing all of them to a failure on the final write is not an acceptable cost
+    for any bug in this function. Written to a temporary file and renamed, so an
+    interruption cannot leave a half-written file behind either.
+    """
+    # Resolved at call time, not bound as a default: a default argument would
+    # capture LAST_RUN at import and ignore any later override.
+    path = LAST_RUN if path is None else path
+    try:
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(records, indent=2))
+        temporary.replace(path)
+    except Exception as exc:                                   # noqa: BLE001
+        print(f"warning: could not save answers to {path}: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
 
 
 def print_table(results: list[CaseResult]) -> None:
@@ -263,17 +273,30 @@ def main() -> int:
         return 0 if all(r.ok for r in results) else 1
 
     agent = Agent(engine=engine)
-    results, records = [], []
-    for case in cases:
-        print(f"  asking: {case['question']}", file=sys.stderr)
-        answer = agent.ask(case["question"])
-        records.append(to_json(case["id"], answer))
-        results.append(evaluate(case, answer, engine))
+    results: list[CaseResult] = []
+    records: list[dict] = []
+    try:
+        for case in cases:
+            print(f"  asking: {case['question']}", file=sys.stderr)
+            answer = agent.ask(case["question"])
+            records.append(to_json(case["id"], answer))
+            # Saved before scoring: a bug in a check must not cost the calls either.
+            save(records)
+            try:
+                results.append(evaluate(case, answer, engine))
+            except Exception as exc:                            # noqa: BLE001
+                results.append(CaseResult(id=case["id"], category=case["category"],
+                                          error=f"check raised {type(exc).__name__}: {exc}"))
+    finally:
+        save(records)
+        if records:
+            print(f"{len(records)} answer(s) saved to {LAST_RUN}", file=sys.stderr)
+            print(f"re-score without calling the model: python evals/run.py --replay",
+                  file=sys.stderr)
+        if results:
+            print_table(results)
 
-    LAST_RUN.write_text(json.dumps(records, indent=2))
-    print(f"answers saved to {LAST_RUN}", file=sys.stderr)
-    print_table(results)
-    return 0 if all(r.ok for r in results) else 1
+    return 0 if results and all(r.ok for r in results) else 1
 
 
 if __name__ == "__main__":

@@ -7,8 +7,6 @@ Serves the single page at /, the API at /ask and /health.
 
 from __future__ import annotations
 
-import datetime as dt
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +18,7 @@ from pydantic import BaseModel, Field
 from jobcosting.agent import MAX_TOOL_CALLS, MODEL, Agent
 from jobcosting.engine import DuckDBEngine
 from jobcosting.guardrails import DEFAULT_ROW_LIMIT
+from jobcosting.serialisation import to_display
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
@@ -58,22 +57,6 @@ class AskResponse(BaseModel):
     row_limit: int = DEFAULT_ROW_LIMIT   # so the page can name the cap it reports
 
 
-def jsonable(value: Any) -> Any:
-    """Make a DuckDB value JSON-safe.
-
-    Decimal becomes a string, not a float: money is cast to DECIMAL(18,2) by the
-    agent precisely so it prints exactly, and routing it through a float would put
-    the rounding error back.
-    """
-    if isinstance(value, Decimal):
-        return str(value)
-    if isinstance(value, (dt.datetime, dt.date, dt.time)):
-        return value.isoformat()
-    if isinstance(value, (bytes, bytearray)):
-        return value.decode("utf-8", "replace")
-    return value
-
-
 @main.get("/health")
 def health() -> dict[str, Any]:
     """Liveness plus the facts worth checking before a demo."""
@@ -95,7 +78,7 @@ def ask(request: AskRequest) -> AskResponse:
         answer=answer.answer,
         sql=answer.sql,
         columns=answer.columns,
-        rows=[[jsonable(v) for v in row] for row in answer.rows],
+        rows=[[to_display(v) for v in row] for row in answer.rows],
         tool_calls=[
             ToolCallOut(
                 sql=c.sql,

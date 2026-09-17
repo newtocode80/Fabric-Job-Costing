@@ -312,3 +312,31 @@ identically to the live one, including that Decimals survive the JSON round trip
 saved as strings, they would otherwise ground nothing.
 
 `last-run.json` is gitignored: it is output, not a source file.
+
+## Losing a completed run to the final write
+
+A run made all fifteen model calls and then crashed serialising them: `date` was
+not handled. The serialisation bug was the trigger; **the defect was that one
+write at the end could discard fifteen completed calls.**
+
+Root cause of the trigger: `app.py` already had a correct encoder covering
+`Decimal`, `date`, `datetime`, `time` and `bytes`. `evals/run.py` had a second,
+weaker copy that handled only `Decimal`. Two encoders, one of them wrong.
+
+| # | Decision | Why |
+|---|---|---|
+| 51 | **One serialisation module**, `jobcosting/serialisation.py`, used by both the API and the runner. | The duplication was the bug. A second copy of a conversion is a second place to forget a type. |
+| 52 | Two encodings, deliberately: `encode`/`decode` (tagged, lossless) for saved runs, `to_display` (plain) for the API. | A replay must score identically to the live run, so a Decimal has to come back a Decimal. The browser wants `"2026-04-24"`, not a tagged wrapper. |
+| 53 | **Neither encoder can raise.** An unknown type degrades to its string form. | No bug in a conversion function is worth fifteen model calls. Tested with a deliberately exotic object. |
+| 54 | The run is saved **after every case**, before scoring, to a temp file that is then renamed. | A crash at case twelve now costs one answer, not twelve. Saving before scoring means a bug in a *check* cannot cost the calls either. The rename makes a half-written file impossible. |
+| 55 | `save()` catches its own failures and warns. | It is called inside the loop; if it raised, it would become the very failure it exists to prevent. |
+| 56 | The whole loop is wrapped in `try/finally` that saves and prints the table. | Belt and braces over the per-case save. |
+
+Types covered and round-trip tested individually: `Decimal`, `date`, `datetime`,
+`time`, `bytes`, `timedelta`, `UUID`, `int`, `float`, `bool`, `None`, `str`, plus
+lists and dicts — and the unknown-type fallback.
+
+**A second bug, found by the test for the first:** `save(records, path=LAST_RUN)`
+bound the path as a default argument, so it was captured at import and ignored any
+override — the test meant to write to a temp directory wrote into the repo instead.
+The path is now resolved at call time.
