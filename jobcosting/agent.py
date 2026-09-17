@@ -29,9 +29,11 @@ SCHEMA_CONTEXT_PATH = ROOT / "model" / "schema_context.md"
 MODEL = "claude-sonnet-4-6"
 MAX_TOOL_CALLS = 3
 
-# Rows are rendered into the tool result the model reads back. A wide result would
-# otherwise crowd out the conversation; the model is told when it has been cut.
-MAX_ROWS_TO_MODEL = 50
+# Rows are rendered into the tool result the model reads back. Set above the
+# largest result the documented patterns produce (231 rows for budget vs actual at
+# job x cost type), so an ordinary analytical answer is never cut. A result bigger
+# than this is one the model should be aggregating or filtering, not reading.
+MAX_ROWS_TO_MODEL = 250
 
 SYSTEM_RULES = """\
 You answer questions about job costing data by writing DuckDB SQL, running it with \
@@ -144,9 +146,17 @@ def _render(result: QueryResult) -> tuple[str, bool]:
         "rows": [list(r) for r in shown],
     }
     if truncated:
+        # Paging is the wrong recovery: a second call spent on OFFSET burns a third
+        # of the budget and still does not produce a whole-result answer.
         payload["note"] = (
-            f"Showing the first {len(shown)} of {result.row_count} rows. "
-            "Aggregate in SQL if you need a figure over all of them."
+            f"This result has {result.row_count} rows and you are seeing the first "
+            f"{len(shown)}. Do NOT page through the rest with OFFSET or a second "
+            f"LIMIT -- that spends another of your {MAX_TOOL_CALLS} calls and still "
+            f"will not let you state a figure over all {result.row_count} rows. "
+            "If you need a total, an average or a count, compute it in SQL with an "
+            "aggregate. If you need particular rows, narrow the WHERE clause or use "
+            "ORDER BY with a LIMIT so the rows you want come back first. If the "
+            f"{len(shown)} rows you already have answer the question, just answer it."
         )
     return json.dumps(payload, default=str), truncated
 

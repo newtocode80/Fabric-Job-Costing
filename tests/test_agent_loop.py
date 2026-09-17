@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from jobcosting.agent import Agent, MAX_TOOL_CALLS
+from jobcosting.agent import Agent, MAX_ROWS_TO_MODEL, MAX_TOOL_CALLS
 from jobcosting.engine import DuckDBEngine
 
 
@@ -119,7 +119,33 @@ def test_refusal_stop_reason_is_surfaced_not_swallowed(engine):
     assert out.error and "declined" in out.error
 
 
-def test_large_result_is_truncated_for_the_model_but_not_for_the_caller(engine):
+def test_a_sixty_six_row_result_is_not_truncated_at_all(engine):
+    """Regression: budget vs actual by job returns 66 rows.
+
+    At the old 50-row limit this came back truncated and the model spent its second
+    call paging with OFFSET 50. It must now arrive whole.
+    """
+    sql = """
+        WITH b AS (SELECT JobKey, sum(BudgetAmount) AS budget FROM fact_job_budget GROUP BY 1),
+             a AS (SELECT JobKey, sum(CostAmount)  AS actual FROM fact_job_cost   GROUP BY 1)
+        SELECT coalesce(b.JobKey, a.JobKey),
+               CAST(coalesce(b.budget, 0) AS DECIMAL(18,2)),
+               CAST(coalesce(a.actual, 0) AS DECIMAL(18,2))
+        FROM b FULL OUTER JOIN a ON a.JobKey = b.JobKey"""
+    agent = make(engine, [
+        ([tool_block(sql)], "tool_use"),
+        ([text_block("done")], "end_turn"),
+    ])
+    out = agent.ask("budget vs actual by job")
+
+    assert len(out.rows) == 66
+    assert out.tool_calls[0].truncated is False
+    sent = json.loads(agent.client.requests[1]["messages"][2]["content"][0]["content"])
+    assert len(sent["rows"]) == 66
+    assert "note" not in sent          # nothing to warn about
+
+
+def test_truncation_tells_the_model_the_total_and_forbids_paging(engine):
     agent = make(engine, [
         ([tool_block("SELECT CostID FROM fact_job_cost")], "tool_use"),
         ([text_block("done")], "end_turn"),
@@ -128,6 +154,21 @@ def test_large_result_is_truncated_for_the_model_but_not_for_the_caller(engine):
     call = out.tool_calls[0]
     assert call.truncated is True
     assert len(call.rows) == 10365                     # caller gets everything
+
     sent = json.loads(agent.client.requests[1]["messages"][2]["content"][0]["content"])
-    assert len(sent["rows"]) == 50 and sent["row_count"] == 10365   # model gets 50 + the count
-    assert "first 50 of 10365" in sent["note"]
+    assert len(sent["rows"]) == MAX_ROWS_TO_MODEL      # model gets the cap
+    assert sent["row_count"] == 10365                  # ... and the true total
+    note = sent["note"]
+    assert "10365 rows" in note
+    assert "Do NOT page" in note and "OFFSET" in note  # paging is the wrong recovery
+    assert "aggregate" in note                         # ... and the right one is named
+
+
+def test_money_is_rounded_when_the_documented_cast_is_used(engine):
+    """The float artefact the SQL panel would otherwise show."""
+    raw = engine.run("SELECT sum(CostAmount) FROM fact_job_cost").rows[0][0]
+    cast = engine.run(
+        "SELECT CAST(sum(CostAmount) AS DECIMAL(18,2)) FROM fact_job_cost"
+    ).rows[0][0]
+    assert str(raw) == "7684852.81000002"
+    assert str(cast) == "7684852.81"

@@ -47,6 +47,22 @@ def render(model: dict) -> str:
       f"{', '.join('`' + c + '`' for c in model['lineage_columns'])}.")
     w("")
 
+    dialect = model.get("sql_dialect")
+    if dialect:
+        w(f"## Writing SQL ({dialect['engine']})")
+        w("")
+        w(f"**{flow(dialect['relation_naming'])}**")
+        w("")
+        w(f"```sql\n-- correct\n{dialect['relation_example_good']}\n\n"
+          f"-- fails: Catalog Error\n{dialect['relation_example_bad']}\n```")
+        w("")
+        w(f"**Money columns** ({', '.join('`' + c + '`' for c in dialect['money_columns'])}): "
+          f"{flow(dialect['money_rule'])}")
+        w("")
+        w(f"```sql\n-- correct\n{dialect['money_example_good']}\n\n"
+          f"-- prints 7684852.81000002\n{dialect['money_example_bad']}\n```")
+        w("")
+
     w("## Tables")
     for t in model["tables"]:
         key = t["key"]
@@ -127,6 +143,8 @@ def render(model: dict) -> str:
         w(f"**{flow(pat['rule'])}**")
         w("")
         w(f"```sql\n{pat['sql'].rstrip()}\n```")
+        if pat.get("grain_note"):
+            w(f"- {flow(pat['grain_note'])}")
         for note in pat.get("notes", []):
             w(f"- {flow(note)}")
 

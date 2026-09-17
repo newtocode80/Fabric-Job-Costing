@@ -174,3 +174,23 @@ emit — it is something the repository must remember, not something the agent a
 | 19 | A failed query returns to the model as `is_error` with the DuckDB message. | This is error handling, not a guardrail. Parse-based rejection, the allowlist, LIMIT injection and the timeout all arrive at M3. |
 | 20 | Adaptive thinking (`thinking: {"type": "adaptive"}`). | Recommended for `claude-sonnet-4-6`; SQL over a model with cast-dependent joins and a required pattern is not a one-shot task. |
 | 21 | Reaching the model is wrapped in a **broad** `except Exception`. | Found by testing: unresolved credentials raise `TypeError`, not `APIError`, so a narrow handler let a traceback escape and would have killed a multi-question run. |
+
+## Three fixes from the first live run
+
+All three came from watching the agent actually fail, not from review. Each is fixed
+where the agent will see it, and covered by a test.
+
+| # | Symptom observed | Fix | Where |
+|---|---|---|---|
+| 1 | First SQL used `lh_job_costing.silver.fact_job_cost` and failed with a Catalog Error | New `sql_dialect` block states relations are bare table names, with a correct and a failing example side by side | `model.yaml` → rendered as "Writing SQL (DuckDB)" near the top of `schema_context.md` |
+| 2 | A 66-row result truncated at 50; the model spent its second call on `OFFSET 50` | Row cap raised 50 → **250**, above the largest documented pattern (231 rows). When a result still truncates, the note gives the true row count and says explicitly not to page, naming aggregate-or-filter as the recovery | `agent.py` |
+| 3 | SQL panel showed `4497901.879999999` | `sql_dialect.money_rule` requires `CAST(... AS DECIMAL(18,2))` on money in the SELECT list, cast at the end of the arithmetic so rounding does not accumulate | `model.yaml` → `schema_context.md` |
+
+Fix 3 also applies to the **prescribed `budget_vs_actual` SQL itself**, which returned
+raw doubles. That SQL is the exemplar the agent copies, so an unrounded exemplar
+teaches the behaviour being corrected. It now casts, and returns `Decimal` values.
+
+The pattern also gained a `grain_note`: "budget vs actual by job" aggregates to **66
+rows** (52 `dim_job` keys + 14 orphan keys from DQ2), while the declared
+`JobKey × CostTypeKey` SQL is 231 rows. Both reconcile to the same two totals, and
+the note states them so a wrong query is self-evident.

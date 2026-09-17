@@ -19,6 +19,30 @@ model:
 # aggregate, filter or group by these -- they carry no business meaning.
 lineage_columns: [_ingested_at, _source_file, _bronze_run_id]
 
+# How to write SQL against this model. These are properties of the engine and the
+# column types, not of the business question, and every one of them has produced a
+# wrong or failed query in testing.
+sql_dialect:
+  engine: DuckDB
+
+  relation_naming: >
+    Relations are BARE TABLE NAMES. There is no catalog and no schema qualifier.
+    "lh_job_costing" and "silver" name the lakehouse and schema the data was
+    exported FROM; they do not exist inside DuckDB and qualifying a table with
+    them fails with a Catalog Error.
+  relation_example_good: SELECT sum(CostAmount) FROM fact_job_cost
+  relation_example_bad: SELECT sum(CostAmount) FROM lh_job_costing.silver.fact_job_cost
+
+  money_columns: [CostAmount, BudgetAmount, ContractValue, Amount, HourlyRate]
+  money_rule: >
+    Every money column is DOUBLE, so a bare SUM returns binary floating point:
+    sum(CostAmount) comes back as 7684852.81000002, not 7684852.81. Cast or round
+    every money value in the SELECT list to DECIMAL(18,2). The SQL and its rows are
+    shown to the user, so an unrounded figure is a visible defect. Cast at the END
+    of the arithmetic, not on each input, so rounding does not accumulate.
+  money_example_good: SELECT CAST(sum(CostAmount) AS DECIMAL(18,2)) AS total_cost FROM fact_job_cost
+  money_example_bad: SELECT sum(CostAmount) AS total_cost FROM fact_job_cost
+
 tables:
 
   - name: dim_job
@@ -356,14 +380,20 @@ analysis_patterns:
           j.JobNumber,
           j.JobName,
           ct.CostType,
-          coalesce(b.budget, 0)               AS budget,
-          coalesce(a.actual, 0)               AS actual,
-          coalesce(a.actual, 0) - coalesce(b.budget, 0) AS variance
+          CAST(coalesce(b.budget, 0) AS DECIMAL(18,2)) AS budget,
+          CAST(coalesce(a.actual, 0) AS DECIMAL(18,2)) AS actual,
+          CAST(coalesce(a.actual, 0) - coalesce(b.budget, 0) AS DECIMAL(18,2)) AS variance
       FROM b
       FULL OUTER JOIN a ON a.JobKey = b.JobKey AND a.CostTypeKey = b.CostTypeKey
       LEFT JOIN dim_job j       ON j.JobKey = coalesce(b.JobKey, a.JobKey)
       LEFT JOIN dim_cost_type ct ON ct.CostTypeKey = CAST(coalesce(b.CostTypeKey, a.CostTypeKey) AS VARCHAR)
       ORDER BY variance DESC
+    grain_note: >
+      The SQL above is at JobKey x CostTypeKey (231 rows). For "by job" with no cost
+      type breakdown, drop CostTypeKey from both CTEs and from the join; that gives
+      66 rows -- the 52 jobs in dim_job plus the 14 orphan JobKeys from DQ2. Both
+      grains must total 8,021,432.92 budget and 7,684,852.81 actual. If a
+      budget-vs-actual result does not hit those two totals, the query is wrong.
     notes:
       - "FULL OUTER JOIN, not INNER: 3 jobs have a budget with no cost rows at that
          cost type, and 17 JobKeys have cost with no budget at all."

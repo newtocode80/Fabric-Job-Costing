@@ -5,6 +5,28 @@
 
 Ignore these columns entirely — they are ingest metadata with no business meaning: `_ingested_at`, `_source_file`, `_bronze_run_id`.
 
+## Writing SQL (DuckDB)
+
+**Relations are BARE TABLE NAMES. There is no catalog and no schema qualifier. "lh_job_costing" and "silver" name the lakehouse and schema the data was exported FROM; they do not exist inside DuckDB and qualifying a table with them fails with a Catalog Error.**
+
+```sql
+-- correct
+SELECT sum(CostAmount) FROM fact_job_cost
+
+-- fails: Catalog Error
+SELECT sum(CostAmount) FROM lh_job_costing.silver.fact_job_cost
+```
+
+**Money columns** (`CostAmount`, `BudgetAmount`, `ContractValue`, `Amount`, `HourlyRate`): Every money column is DOUBLE, so a bare SUM returns binary floating point: sum(CostAmount) comes back as 7684852.81000002, not 7684852.81. Cast or round every money value in the SELECT list to DECIMAL(18,2). The SQL and its rows are shown to the user, so an unrounded figure is a visible defect. Cast at the END of the arithmetic, not on each input, so rounding does not accumulate.
+
+```sql
+-- correct
+SELECT CAST(sum(CostAmount) AS DECIMAL(18,2)) AS total_cost FROM fact_job_cost
+
+-- prints 7684852.81000002
+SELECT sum(CostAmount) AS total_cost FROM fact_job_cost
+```
+
 ## Tables
 
 ### `dim_job` — dimension, 52 rows
@@ -206,15 +228,16 @@ SELECT
     j.JobNumber,
     j.JobName,
     ct.CostType,
-    coalesce(b.budget, 0)               AS budget,
-    coalesce(a.actual, 0)               AS actual,
-    coalesce(a.actual, 0) - coalesce(b.budget, 0) AS variance
+    CAST(coalesce(b.budget, 0) AS DECIMAL(18,2)) AS budget,
+    CAST(coalesce(a.actual, 0) AS DECIMAL(18,2)) AS actual,
+    CAST(coalesce(a.actual, 0) - coalesce(b.budget, 0) AS DECIMAL(18,2)) AS variance
 FROM b
 FULL OUTER JOIN a ON a.JobKey = b.JobKey AND a.CostTypeKey = b.CostTypeKey
 LEFT JOIN dim_job j       ON j.JobKey = coalesce(b.JobKey, a.JobKey)
 LEFT JOIN dim_cost_type ct ON ct.CostTypeKey = CAST(coalesce(b.CostTypeKey, a.CostTypeKey) AS VARCHAR)
 ORDER BY variance DESC
 ```
+- The SQL above is at JobKey x CostTypeKey (231 rows). For "by job" with no cost type breakdown, drop CostTypeKey from both CTEs and from the join; that gives 66 rows -- the 52 jobs in dim_job plus the 14 orphan JobKeys from DQ2. Both grains must total 8,021,432.92 budget and 7,684,852.81 actual. If a budget-vs-actual result does not hit those two totals, the query is wrong.
 - FULL OUTER JOIN, not INNER: 3 jobs have a budget with no cost rows at that cost type, and 17 JobKeys have cost with no budget at all.
 - LEFT JOIN to dim_job, not INNER: 14 of those 17 JobKeys do not exist in dim_job (DQ2), and an inner join would hide 16,882.98 of real cost.
 - Totals across the whole result double-count nothing, but filtering to one side of the FULL OUTER JOIN reintroduces the omissions above.
