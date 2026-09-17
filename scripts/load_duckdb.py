@@ -1,10 +1,11 @@
 """Load the silver Parquet exports into DuckDB and print row counts per table.
 
-DuckDB runs in memory and each model table is a view over its Parquet file, so
-replacing the fixtures with real exports is a file drop -- there is no database to
-rebuild. Relations are named for the MODEL table (FactJobs), while the files keep
-their silver ENTITY name (silver_jobs.parquet), mirroring the TMDL entityName
-mapping the agent will see in its schema context.
+Reads the real exports of the `lh_job_costing` lakehouse, schema `silver`, from
+data/silver. DuckDB runs in memory and each table is a view over its Parquet file,
+so refreshing an export is a file drop -- there is no database to rebuild.
+
+Relation names are the Parquet file stems, which are already the model's table
+names (dim_job.parquet -> dim_job), so no entity-to-table mapping is needed.
 
 Usage:  python scripts/load_duckdb.py [--data data/silver]
 """
@@ -17,37 +18,37 @@ from pathlib import Path
 
 import duckdb
 
-# Entity -> model table name. TEMPORARY: M2 replaces this literal with the mapping
-# derived from the TMDL, which is the model's ground truth.
-ENTITY_TO_TABLE: dict[str, str] = {
-    "silver_customers": "DimCustomer",
-    "silver_jobs": "FactJobs",
-    "silver_expenses": "FactExpenses",
-    "silver_invoices": "FactInvoices",
-    "silver_targets": "FactTargets",
-}
-
 DEFAULT_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "silver"
 
+# Row counts confirmed against the source lakehouse by the model owner. The loader
+# does not enforce these -- scripts/verify_exports.py does -- but they record what a
+# correct export looks like.
+EXPECTED_ROWS: dict[str, int] = {
+    "dim_change_order": 26,
+    "dim_cost_type": 4,
+    "dim_date": 669,
+    "dim_employee": 45,
+    "dim_job": 52,
+    "fact_job_budget": 196,
+    "fact_job_cost": 10365,
+}
 
-def load(data_dir: Path) -> duckdb.DuckDBPyConnection:
-    """Return an in-memory connection with one view per model table."""
-    missing = [
-        entity
-        for entity in ENTITY_TO_TABLE
-        if not (data_dir / f"{entity}.parquet").exists()
-    ]
-    if missing:
-        raise FileNotFoundError(
-            f"No Parquet export for {', '.join(sorted(missing))} in {data_dir}.\n"
-            "Run: python scripts/generate_fixtures.py"
-        )
 
+def discover(data_dir: Path) -> dict[str, Path]:
+    """Map relation name -> Parquet path for every export in `data_dir`."""
+    paths = sorted(data_dir.glob("*.parquet"))
+    if not paths:
+        raise FileNotFoundError(f"No Parquet exports found in {data_dir}")
+    return {path.stem: path for path in paths}
+
+
+def load(data_dir: Path = DEFAULT_DATA_DIR) -> duckdb.DuckDBPyConnection:
+    """Return an in-memory connection with one view per exported table."""
     con = duckdb.connect()
-    for entity, table in ENTITY_TO_TABLE.items():
+    for table, path in discover(data_dir).items():
         # DuckDB cannot prepare DDL, so the path is inlined with quotes escaped.
-        path = (data_dir / f"{entity}.parquet").as_posix().replace("'", "''")
-        con.execute(f"""CREATE VIEW "{table}" AS SELECT * FROM read_parquet('{path}')""")
+        literal = path.as_posix().replace("'", "''")
+        con.execute(f"""CREATE VIEW "{table}" AS SELECT * FROM read_parquet('{literal}')""")
     return con
 
 
@@ -58,20 +59,21 @@ def main() -> int:
 
     try:
         con = load(args.data)
+        tables = discover(args.data)
     except FileNotFoundError as exc:
         print(exc, file=sys.stderr)
         return 1
 
-    print(f"{'Table':<14} {'Entity':<18} {'Columns':>7} {'Rows':>9}")
-    print("-" * 51)
+    print(f"{'Table':<20} {'Columns':>7} {'Rows':>9}")
+    print("-" * 38)
     total = 0
-    for entity, table in ENTITY_TO_TABLE.items():
+    for table in tables:
         rows = con.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0]
         columns = len(con.execute(f'SELECT * FROM "{table}" LIMIT 0').description)
         total += rows
-        print(f"{table:<14} {entity:<18} {columns:>7} {rows:>9,}")
-    print("-" * 51)
-    print(f"{'total':<14} {'':<18} {'':>7} {total:>9,}")
+        print(f"{table:<20} {columns:>7} {rows:>9,}")
+    print("-" * 38)
+    print(f"{'total':<20} {'':>7} {total:>9,}")
     return 0
 
 

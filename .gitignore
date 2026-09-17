@@ -1,5 +1,6 @@
-# Generated fixture / exported data -- never committed.
-data/
+# Real silver exports in data/silver/ ARE tracked -- they are the model's data.
+# Only generated output is ignored.
+data/generated/
 
 __pycache__/
 *.pyc

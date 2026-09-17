@@ -1,4 +1,15 @@
-"""Generate fixture Parquet exports of the five silver tables.
+"""RETIRED -- superseded by the real exports in data/silver. Do not run this
+to produce app data.
+
+This targets the WRONG MODEL: the five-table `lh_operations_intelligence` model,
+not the seven-table `lh_job_costing` star schema the app is built against. It is
+kept only as a record of how the project was unblocked before real exports
+existed. See docs/decisions.md.
+
+Its output now goes to data/generated (gitignored), not data/silver, so running
+it cannot overwrite a real export.
+
+Generate fixture Parquet exports of the five silver tables.
 
 These rows are SYNTHETIC. They stand in for real exports of the
 `lh_operations_intelligence` lakehouse until those are available, and exist so the
@@ -393,7 +404,7 @@ def main() -> None:
     parser.add_argument(
         "--out",
         type=Path,
-        default=Path(__file__).resolve().parents[1] / "data" / "silver",
+        default=Path(__file__).resolve().parents[1] / "data" / "generated",
         help="directory to write the Parquet files into",
     )
     args = parser.parse_args()
