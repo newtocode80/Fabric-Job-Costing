@@ -194,3 +194,31 @@ The pattern also gained a `grain_note`: "budget vs actual by job" aggregates to 
 rows** (52 `dim_job` keys + 14 orphan keys from DQ2), while the declared
 `JobKey × CostTypeKey` SQL is 231 rows. Both reconcile to the same two totals, and
 the note states them so a wrong query is self-evident.
+
+## M3 decisions — guardrails
+
+Tests were written first: `tests/test_guardrails.py`, 69 cases, failing on a missing
+module before any implementation existed.
+
+| # | Decision | Why |
+|---|---|---|
+| 22 | Parsing is **sqlglot** in its DuckDB dialect. | A real parser is what "not by regex" requires. Three tests exist only to prove the difference: a `DROP TABLE` inside a string literal is allowed, one inside a comment is allowed, and `/* SELECT */ DROP TABLE dim_job` is rejected. A keyword blocklist gets all three wrong. |
+| 23 | The allowlist check rejects any `Table` node with an **empty name**. | `read_parquet('/etc/passwd')` parses as an ordinary `Select`, and the file-reading function hangs off a nameless `Table` node. An allowlist that only compared names would wave it through — statement type alone stops nothing here. |
+| 24 | CTE aliases are collected and excluded from the allowlist check. | `WITH b AS (...) SELECT * FROM b` references a CTE, not a table. Without this the prescribed `budget_vs_actual` pattern would be rejected by its own guardrails. |
+| 25 | LIMIT is **appended as text**, not regenerated from the AST. | The parse decides *whether* to inject; the SQL that runs is the model's own text. Regenerating would reformat the query and strip its comments, and the SQL panel is a first-class feature. Safe because the statement is already proven to be a single query. |
+| 26 | The timeout is a `threading.Timer` calling DuckDB's `interrupt()`. | DuckDB has no per-query time limit. A test asserts the connection still works **after** an interrupt — one slow question must not break the next. |
+| 27 | `ToolCall` records both `sql` (as written) and `executed_sql` (as run), and `Answer.sql` returns the executed one. | The panel must show the query that produced the rows, LIMIT included. Keeping both means neither is misrepresented. |
+| 28 | The guardrails are stated in the system prompt, not only enforced. | A rejection costs one of three calls. Telling the model the rules up front means it rarely spends one discovering them; the rejection path is the backstop, not the teacher. |
+| 29 | Guardrails sit in the **tool layer**, not the engine. | `check()` is engine-agnostic, so a `FabricEngine` inherits rules 1-3 unchanged. Only the timeout is engine-specific, because only the engine can cancel its own query. |
+
+### Known gap: an explicit oversized LIMIT is honoured
+
+Spec rule 3 is "inject LIMIT 500 if absent", and that is implemented exactly. A query
+that already carries `LIMIT 100000` therefore keeps it and returns all 10,365 rows.
+
+This is a real hole in the row cap, and a reachable one: a model that has just been
+told its result was truncated could plausibly write a large explicit LIMIT to get the
+rest. Clamping any LIMIT above 500 down to 500 is a one-line change to
+`_has_top_level_limit`, but it rewrites a value the model chose deliberately, so it is
+a scope decision for the owner rather than one to make silently. **Not implemented;
+awaiting a ruling.**

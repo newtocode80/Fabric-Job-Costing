@@ -34,12 +34,17 @@ def show(answer: Answer) -> None:
     if not answer.tool_calls:
         print("-- no run_sql calls --")
     for i, call in enumerate(answer.tool_calls, 1):
-        status = "ok" if call.ok else "FAILED"
+        status = "ok" if call.ok else ("REJECTED" if call.rejected else "FAILED")
         print(f"--- run_sql call {i} of {len(answer.tool_calls)} [{status}] ---")
-        print(call.sql.strip())
+        # Show what actually ran. When a guardrail rewrote the query, show the
+        # model's version too, so the panel never misrepresents either one.
+        shown = call.executed_sql or call.sql
+        print(shown.strip())
+        if call.executed_sql and call.executed_sql.strip() != call.sql.strip():
+            print(f"  (as written by the model: {call.sql.strip()})")
         print()
         if not call.ok:
-            print(f"  error: {call.error}")
+            print(f"  {'rejected' if call.rejected else 'error'}: {call.error}")
         else:
             print(f"  {' | '.join(call.columns)}")
             for row in call.rows[:20]:

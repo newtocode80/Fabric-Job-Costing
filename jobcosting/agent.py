@@ -5,10 +5,9 @@ rules the build spec fixes: answer in business terms, never state a number that 
 not come back from a query, and say what is missing when the schema cannot answer
 the question.
 
-M1 scope: no guardrails. SQL is passed to the engine as written. A failing query
-comes back to the model as an error tool result so it can correct itself -- that is
-error handling, not a guardrail; rejection by parse, the table allowlist, LIMIT
-injection and the timeout all arrive at M3.
+Every query goes through jobcosting.guardrails before it reaches the engine. A
+rejection comes back to the model as an error tool result carrying the reason, so
+it can correct itself and try again within its remaining budget.
 """
 
 from __future__ import annotations
@@ -21,6 +20,7 @@ from typing import Any
 import anthropic
 
 from .engine import QueryEngine, QueryResult
+from .guardrails import DEFAULT_ROW_LIMIT, QueryRejected, check, load_allowed_tables
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_CONTEXT_PATH = ROOT / "model" / "schema_context.md"
@@ -54,6 +54,19 @@ different answers, ask which is meant instead of guessing.
 5. Where a known data quality issue affects the answer you are giving, say so in the \
 answer.
 
+run_sql is guarded. Queries that break these rules are rejected before they run \
+and cost you a call, so write within them:
+
+- Only a single SELECT, or a single WITH ... SELECT. No DDL, no DML, no PRAGMA, \
+no settings, no reading files.
+- Only the tables listed in the schema below. No system catalogues, no table \
+functions such as read_parquet, no file paths.
+- LIMIT {row_limit} is added automatically when your query has none, so detail \
+queries come back capped. Aggregate in SQL when you need a figure over everything.
+- A query is stopped after 10 seconds.
+
+A rejection tells you what was wrong; fix it and try again.
+
 You have at most {max_calls} run_sql calls per question. Answer in prose a project \
 manager would understand -- no markdown tables, no SQL in the answer itself. The SQL \
 is shown to the user separately.
@@ -83,8 +96,10 @@ RUN_SQL_TOOL: dict[str, Any] = {
 class ToolCall:
     """One run_sql call and what it returned."""
 
-    sql: str
+    sql: str                 # what the model wrote
     ok: bool
+    executed_sql: str | None = None   # what actually ran, after LIMIT injection
+    rejected: bool = False            # refused by a guardrail, never reached the engine
     columns: list[str] = field(default_factory=list)
     rows: list[tuple[Any, ...]] = field(default_factory=list)
     error: str | None = None
@@ -104,7 +119,9 @@ class Answer:
         """The SQL behind the answer -- the last call that succeeded."""
         for call in reversed(self.tool_calls):
             if call.ok:
-                return call.sql
+                # What ran, not what was written -- the panel must show the query
+                # that produced these rows, LIMIT and all.
+                return call.executed_sql or call.sql
         return self.tool_calls[-1].sql if self.tool_calls else None
 
     @property
@@ -130,6 +147,7 @@ def build_system_prompt(schema_context_path: Path = SCHEMA_CONTEXT_PATH) -> str:
         )
     return SYSTEM_RULES.format(
         max_calls=MAX_TOOL_CALLS,
+        row_limit=DEFAULT_ROW_LIMIT,
         schema_context=schema_context_path.read_text(),
     )
 
@@ -182,16 +200,33 @@ class Agent:
         self.client = client if client is not None else anthropic.Anthropic()
         self.model = model
         self.max_tool_calls = max_tool_calls
+        self.allowed_tables = load_allowed_tables()
         self.system_prompt = build_system_prompt(schema_context_path)
 
     def _execute(self, sql: str) -> tuple[ToolCall, str, bool]:
-        """Run one query. Returns (record, text for the model, is_error)."""
+        """Guard, then run one query. Returns (record, text for the model, is_error)."""
         try:
-            result = self.engine.run(sql)
+            safe_sql = check(sql, self.allowed_tables)
+        except QueryRejected as exc:
+            # A guardrail refused. The reason is written for the model to act on.
+            return (
+                ToolCall(sql=sql, ok=False, rejected=True, error=str(exc)),
+                f"The query was rejected and did not run.\n{exc}",
+                True,
+            )
+
+        try:
+            result = self.engine.run(safe_sql)
+        except TimeoutError as exc:
+            return (
+                ToolCall(sql=sql, ok=False, executed_sql=safe_sql, error=str(exc)),
+                str(exc),
+                True,
+            )
         except Exception as exc:
             message = f"{type(exc).__name__}: {exc}"
             return (
-                ToolCall(sql=sql, ok=False, error=message),
+                ToolCall(sql=sql, ok=False, executed_sql=safe_sql, error=message),
                 f"The query failed.\n{message}\nFix the SQL and try again.",
                 True,
             )
@@ -200,6 +235,7 @@ class Agent:
             ToolCall(
                 sql=sql,
                 ok=True,
+                executed_sql=safe_sql,
                 columns=result.columns,
                 rows=result.rows,
                 truncated=truncated,

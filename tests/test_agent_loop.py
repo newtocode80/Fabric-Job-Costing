@@ -65,7 +65,10 @@ def test_tool_result_is_fed_back_and_answer_returned(engine):
 
     assert len(out.tool_calls) == 1
     assert out.tool_calls[0].ok
-    assert out.sql == sql
+    # out.sql is what RAN, so it carries the injected LIMIT; the model's own text
+    # is kept alongside it.
+    assert out.tool_calls[0].sql == sql
+    assert out.sql == f"{sql}\nLIMIT 500"
     assert out.columns == ["CostType", "sum(CostAmount)"]
     assert len(out.rows) == 4
     assert out.answer == "Material is the largest category."
@@ -78,7 +81,7 @@ def test_tool_result_is_fed_back_and_answer_returned(engine):
     assert json.loads(result["content"])["row_count"] == 4
 
 
-def test_failed_query_returns_is_error_and_the_model_can_retry(engine):
+def test_a_guardrail_rejection_is_returned_as_an_error_the_model_can_retry(engine):
     agent = make(engine, [
         ([tool_block("SELECT * FROM table_that_does_not_exist")], "tool_use"),
         ([tool_block("SELECT count(*) FROM dim_job", "tu_2")], "tool_use"),
@@ -86,15 +89,34 @@ def test_failed_query_returns_is_error_and_the_model_can_retry(engine):
     ])
     out = agent.ask("how many jobs?")
 
-    assert out.tool_calls[0].ok is False
-    assert "table_that_does_not_exist" in out.tool_calls[0].error
+    rejected = out.tool_calls[0]
+    assert rejected.ok is False and rejected.rejected is True
+    assert rejected.executed_sql is None            # never reached the engine
+    assert "table_that_does_not_exist" in rejected.error
+    assert "fact_job_cost" in rejected.error        # the reason lists what it MAY use
+
     result = agent.client.requests[1]["messages"][2]["content"][0]
     assert result["is_error"] is True
-    assert "Fix the SQL" in result["content"]
+    assert "rejected and did not run" in result["content"]
 
     # sql/rows skip the failed call and report the one that worked.
-    assert out.sql == "SELECT count(*) FROM dim_job"
+    assert out.sql == "SELECT count(*) FROM dim_job\nLIMIT 500"
     assert out.rows == [(52,)]
+
+
+def test_a_real_engine_error_is_distinguished_from_a_guardrail_rejection(engine):
+    """An allowed table with a bad column: the guardrails pass it, DuckDB rejects it."""
+    agent = make(engine, [
+        ([tool_block("SELECT NoSuchColumn FROM dim_job")], "tool_use"),
+        ([text_block("recovered")], "end_turn"),
+    ])
+    out = agent.ask("something")
+    call = out.tool_calls[0]
+    assert call.ok is False
+    assert call.rejected is False                   # not a guardrail
+    assert call.executed_sql is not None            # it did reach the engine
+    assert "NoSuchColumn" in call.error
+    assert "Fix the SQL" in agent.client.requests[1]["messages"][2]["content"][0]["content"]
 
 
 def test_call_budget_is_enforced_and_the_tool_is_withdrawn(engine):
@@ -152,14 +174,16 @@ def test_truncation_tells_the_model_the_total_and_forbids_paging(engine):
     ])
     out = agent.ask("every cost id")
     call = out.tool_calls[0]
-    assert call.truncated is True
-    assert len(call.rows) == 10365                     # caller gets everything
+    # LIMIT 500 was injected, so 10,365 rows never leave the engine.
+    assert call.executed_sql.endswith("LIMIT 500")
+    assert len(call.rows) == 500
+    assert call.truncated is True                      # 500 > the 250 shown
 
     sent = json.loads(agent.client.requests[1]["messages"][2]["content"][0]["content"])
     assert len(sent["rows"]) == MAX_ROWS_TO_MODEL      # model gets the cap
-    assert sent["row_count"] == 10365                  # ... and the true total
+    assert sent["row_count"] == 500                    # ... and the true total
     note = sent["note"]
-    assert "10365 rows" in note
+    assert "500 rows" in note
     assert "Do NOT page" in note and "OFFSET" in note  # paging is the wrong recovery
     assert "aggregate" in note                         # ... and the right one is named
 
