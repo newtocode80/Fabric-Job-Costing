@@ -429,3 +429,29 @@ severity instead.
 
 The README explains the line, because the conservatism is a design choice a reader
 would otherwise mistake for a bug.
+
+## Severity, tightened
+
+"Appears anywhere in the rendered prompt" was too loose. Scoped instead to the
+sections the model is instructed to cite: `data_quality`, `cannot_answer`,
+`required_caveats`, and column descriptions.
+
+Chosen over the magnitude-floor alternative because **a floor cannot satisfy both
+requirements**: 44 must fail and 52 must warn, so the floor would have to sit
+between them. That is tuning to the fixture, not a rule.
+
+| Figure | Where | Severity |
+|---|---|---|
+| `44` | only a join warning ("keeps 44 of 52 jobs", unrelated) | **FAIL** |
+| `52` | `dim_job.JobName` description ("27 distinct over 52 jobs") | WARN |
+| `11`, `8` | `dim_change_order.Status` description | WARN |
+| `19` | nowhere — it is `11 + 8`, computed | **FAIL** |
+| `39` | nowhere | **FAIL** |
+
+`test_the_observed_failure_is_a_hard_failure` now scores "33 of 44" against the
+**real** declaration and asserts `failures == [44]` with no warnings, as required.
+
+**Consequence, stated rather than buried:** `approved_change_order_value` moves from
+warn to FAIL, because 19 is arithmetic on two cited figures. By the check's own
+logic that is correct — computing with a prompt figure is the failure mode — but it
+is a harmless sentence in practice, and is the owner's to overrule.

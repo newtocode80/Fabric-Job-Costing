@@ -71,11 +71,12 @@ class Grounding:
 
       FAIL  -- the number appears nowhere. Nothing in the data or the prompt says
                it. "15-39 days late" when no job is 39 days late.
-      WARN  -- the number is printed verbatim in the system prompt but is not in
-               this result. "across all 52 jobs" is true and the model read it
-               there; "52 total minus the 8 above = 44 assessable" is the failure
-               this check exists for. Both look identical to a checker, so the
-               conservative call is to surface it and let a person decide.
+      WARN  -- the number is one the prompt instructs the model to cite -- a known
+               issue, a refusal script, a mandatory caveat, a column description --
+               but it is not in this result. "across all 52 jobs" is true and the
+               model read it there. Quoting and computing look identical to a
+               checker, so the conservative call is to surface it and let a person
+               decide.
     """
 
     numbers: list[Decimal] = field(default_factory=list)
@@ -130,23 +131,37 @@ def _walk(node: Any):
 
 
 @functools.lru_cache(maxsize=4)
-def prompt_figures(path: Path = SCHEMA_CONTEXT_PATH) -> frozenset[Decimal]:
-    """Every figure printed in the rendered system prompt.
+def citable_figures(model_path: Path = MODEL_PATH) -> frozenset[Decimal]:
+    """Figures the model is instructed to cite as context.
 
-    Used ONLY to grade severity, never to ground. Widening the supported set to
-    everything the prompt prints would ground the 52 in "52 total minus the 8 above
-    = 44 assessable" and let that failure through, which is the whole point of the
-    check. Seeing the number is not the same as being entitled to compute with it.
+    Used ONLY to grade severity, never to ground.
+
+    Scoped to the parts of the declaration the model is told to quote from: the
+    known issues, the refusal scripts, the mandatory caveats on a calculation, and
+    the column descriptions. Quoting one of those is reading an instruction.
+
+    Deliberately NOT every number in the rendered prompt. Relationship evidence is
+    excluded, and that exclusion is the point: the prompt says "keeps 44 of 52
+    jobs" about a completely unrelated join, and counting that would downgrade
+    "33 of 44 jobs finished late" -- the canonical failure -- to a warning. A
+    coincidence in a join warning must not excuse invented arithmetic.
     """
-    try:
-        text = Path(path).read_text()
-    except OSError:
-        return frozenset()
+    model = yaml.safe_load(Path(model_path).read_text())
+    cited: list[Any] = [
+        model.get("data_quality", []),
+        model.get("cannot_answer", []),
+        [pattern.get("required_caveats", []) for pattern in model.get("analysis_patterns", [])],
+        [
+            [column.get("desc", "") for column in table.get("columns", {}).values()]
+            for table in model.get("tables", [])
+        ],
+    ]
     found: set[Decimal] = set()
-    for token in DECLARED_NUMBER.findall(text):
-        value = _to_decimal(token)
-        if value is not None:
-            found.add(value)
+    for scalar in _walk(cited):
+        for token in DECLARED_NUMBER.findall(str(scalar)):
+            value = _to_decimal(token)
+            if value is not None:
+                found.add(value)
     return frozenset(found)
 
 
@@ -342,6 +357,6 @@ def check_answer(
         for number in stated
         if not _matches(number, supported) and not _matches(number, ratios)
     ]
-    printed = set(prompt_figures() if seen_in_prompt is None else seen_in_prompt)
+    printed = set(citable_figures() if seen_in_prompt is None else seen_in_prompt)
     warnings = [number for number in ungrounded if number in printed]
     return Grounding(numbers=stated, ungrounded=ungrounded, warnings=warnings)

@@ -5,7 +5,12 @@ from __future__ import annotations
 from decimal import Decimal
 
 from jobcosting.agent import ToolCall
-from jobcosting.grounding import check_answer, declared_figures, extract_numbers
+from jobcosting.grounding import (
+    check_answer,
+    citable_figures,
+    declared_figures,
+    extract_numbers,
+)
 
 
 def call(columns, rows):
@@ -19,31 +24,36 @@ def test_extracts_numbers_in_every_form_the_prose_uses():
 
 # ------------------------------------------ the failure this check exists for
 
-def test_the_observed_failure_is_caught():
-    """33 late jobs came back; "33 of 44" invents the 44."""
+def test_the_observed_failure_is_a_hard_failure():
+    """33 late jobs came back; "33 of 44" invents the 44.
+
+    Scored against the REAL declaration, not an injected one. The rendered prompt
+    contains "keeps 44 of 52 jobs" in a join warning about something else entirely,
+    and this must not downgrade the canonical failure to a warning -- which is why
+    severity is scoped to the sections the model is told to cite, and relationship
+    evidence is not one of them.
+    """
     late = call(["JobNumber"], [(f"J-2025{i:02d}",) for i in range(33)])
-    result = check_answer("33 of 44 jobs finished late.", [late],
-                          seen_in_prompt=frozenset())
+    result = check_answer("33 of 44 jobs finished late.", [late])
+
+    assert result.failures == [Decimal("44")], "44 must be a hard failure"
+    assert result.warnings == []
     assert not result.ok
-    assert result.failures == [Decimal("44")]
     assert "44" in result.summary()
 
 
-def test_a_denominator_that_collides_with_a_prompt_figure_only_warns():
-    """A known softening of the canonical case, recorded rather than hidden.
+def test_the_unrelated_44_in_the_prompt_is_not_citable():
+    """The exclusion the test above depends on, asserted directly."""
+    assert Decimal("44") not in citable_figures()
 
-    The real prompt prints "keeps 44 of 52 jobs" about a completely different 44.
-    Severity is decided by whether the figure appears in the prompt at all, so this
-    collision downgrades the canonical failure to a warning. It is still surfaced;
-    it no longer fails the case on its own. Small integers collide easily -- that is
-    the cost of grading severity this way.
-    """
-    late = call(["JobNumber"], [(f"J-2025{i:02d}",) for i in range(33)])
-    result = check_answer("33 of 44 jobs finished late.", [late],
-                          seen_in_prompt=frozenset({Decimal("44")}))
-    assert result.ungrounded == [Decimal("44")]     # still flagged
-    assert result.warnings == [Decimal("44")]       # ... as a warning
-    assert result.ok                                 # ... which does not fail alone
+
+def test_a_column_description_figure_is_citable_and_only_warns():
+    """52 is in dim_job's JobName description, so quoting it is reading the prompt."""
+    assert Decimal("52") in citable_figures()
+    rows = call(["total"], [(Decimal("9920000.00"),)])
+    result = check_answer("The total contract value across all 52 jobs is $9,920,000.00.", [rows])
+    assert result.warnings == [Decimal("52")]
+    assert result.ok
 
 
 def test_the_same_answer_without_the_invented_denominator_passes():
@@ -159,6 +169,13 @@ def test_a_full_data_quality_caveat_passes():
         "job-level totals will not reconcile to this figure."
     )
     assert check_answer(answer, [rows]).ok
+
+
+def test_severity_never_rescues_a_number_from_nowhere():
+    """39 is in neither the result nor any cited section."""
+    # Values chosen so no subset sums to 39: 2+40=42, 2+41=43, 40+41=81.
+    rows = call(["days_late"], [(2,), (40,), (41,)])
+    assert check_answer("Overruns ran up to 39 days.", [rows]).failures == [Decimal("39")]
 
 
 def test_the_declared_boundary_is_where_the_prompt_tells_it_to_speak():

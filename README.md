@@ -71,11 +71,19 @@ different scale or rounded for readability.
 **Flagged numbers carry a severity, and the line between them is a deliberate
 design choice.**
 
-- **FAIL** — the number appears nowhere, in neither the result nor the prompt.
-  *"Overruns ran 15 to 39 days"* when no job is 39 days late.
-- **WARN** — the number is printed in the system prompt but is not in this result.
-  *"across all 52 jobs"* is true, and the model read 52 in its own schema
-  description.
+- **FAIL** — the number is in neither the result nor anything the model was told
+  to cite. *"Overruns ran 15 to 39 days"* when no job is 39 days late.
+- **WARN** — the number is one the prompt instructs the model to quote — a known
+  issue, a refusal script, a mandatory caveat, a column description — but it is
+  not in this result. *"across all 52 jobs"* is true, and 52 is in `dim_job`'s
+  own column description.
+
+Severity is scoped to those cited sections, **not to every number the prompt
+happens to print**. The rendered prompt says *"keeps 44 of 52 jobs"* in a join
+warning about something unrelated; counting that would downgrade *"33 of 44
+finished late"* — the case this whole check exists for — to a warning. A
+coincidence in a join warning must not excuse invented arithmetic, so relationship
+evidence is deliberately excluded.
 
 The obvious question is why prompt figures are not simply treated as supported.
 Because the failure this check exists for is built out of them:
@@ -90,10 +98,11 @@ computing — the two are identical in the text. So the rule is conservative on
 purpose: it over-flags, marks the likely-harmless cases as warnings, and leaves the
 judgement to a person.
 
-The cost of that choice is honest and small: a legitimate figure quoted for context
-shows up as a warning, and small integers collide (a `44` in the prompt about
-something else downgrades the canonical case to a warning). A checker that
-over-flags beats one that lets the arithmetic chain through.
+The cost of that choice is honest and small: a legitimate figure quoted for
+context shows up as a warning, and a figure computed from two cited ones — *"the
+remaining 19 change orders (11 Pending, 8 Rejected)"* — fails, because 19 was
+calculated rather than read. That is the rule working, not misfiring. A checker
+that over-flags beats one that lets the arithmetic chain through.
 
 ## Evals
 

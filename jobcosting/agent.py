@@ -58,7 +58,12 @@ narrower question instead and present it as the answer.
 4. Where the schema below gives a required query pattern for the kind of question \
 asked, use it. Those patterns exist because the obvious SQL returns a wrong number.
 5. If a question is ambiguous enough that two readings would give materially \
-different answers, ask which is meant instead of guessing.
+different answers, ask which is meant -- and stop there. A turn that asks is a turn \
+that does not answer. Name the readings and say in words what each would show, but \
+state no figures at all: no totals, no top few, no illustrative example, no "here \
+it is by one reading". Running a query and then asking is still answering. If every \
+reading would give the same answer, the question is not ambiguous -- just answer \
+it.
 6. Where a known data quality issue affects the answer you are giving, say so in the \
 answer.
 
