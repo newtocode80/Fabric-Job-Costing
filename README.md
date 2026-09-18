@@ -121,6 +121,53 @@ python evals/run.py --dry-run    # validate the file and its ground-truth SQL
 A live run saves every answer as it goes, so changing a check costs no model calls
 to re-score, and a failure part way through never discards the calls already made.
 
+Latest run, re-scored against the current checks:
+
+```
+CASE                         CATEGORY          CALLS  RESULT  CHECKS
+---------------------------------------------------------------------------------------
+total_cost_by_cost_type      simple_aggregate      1  pass    9/9
+total_contract_value         simple_aggregate      1  warn    7/7
+                                                              ! numbers from the prompt, not this result: 52, 71676.06
+labour_cost_total            filter_aggregate      1  FAIL    6/7
+                                                              x numbers grounded (1 of 4 in neither the result nor the prompt: 346.65)
+approved_change_order_value  filter_aggregate      1  FAIL    7/8
+                                                              x numbers grounded (1 of 5 in neither the result nor the prompt: 19; 2 from the prompt, not this result: 11, 8)
+                                                              ! numbers from the prompt, not this result: 11, 8
+cost_for_one_job             filter_aggregate      1  pass    8/8
+cost_by_client               join                  1  pass    8/8
+labour_hours_by_trade        join                  1  pass    7/7
+cost_by_job_type             join                  1  pass    8/8
+cost_quarter_over_quarter    time_comparison       3  pass    7/7
+change_orders_by_quarter     time_comparison       1  pass    6/6
+budget_vs_actual_by_job      required_pattern      1  pass    8/8
+jobs_finished_late           grounding             1  warn    6/6
+                                                              ! numbers from the prompt, not this result: 52
+cost_by_region               refusal               0  warn    6/6
+                                                              ! numbers from the prompt, not this result: 5728, 40
+profit_by_job                required_pattern      1  warn    11/11
+                                                              ! numbers from the prompt, not this result: 71676.06
+biggest_jobs                 ambiguous             1  FAIL    5/6
+                                                              x states no money figure (quoted a figure it should not have)
+---------------------------------------------------------------------------------------
+12/15 passed (4 with warnings)
+x = failed check    ! = number printed in the prompt but not in this result
+```
+
+Two rows are worth reading rather than skimming.
+
+**`approved_change_order_value`** states *"the remaining 19 change orders (11
+Pending, 8 Rejected)"*. 11 and 8 are quoted from a column description and warn; 19
+is their sum — computed rather than read — and fails. The sentence is harmless, and
+the rule is doing exactly what it exists for.
+
+**`biggest_jobs`** answered with a ranked top 20 and closed with *"would you like to
+drill into any of these jobs?"*. That is answering with a follow-up question
+attached, not asking which was meant. `model.yaml` now declares the question
+ambiguous, with the four readings and measured evidence that they disagree: by
+contract value, budget or cost the biggest job is J-202551; by duration it is
+J-202509. Awaiting a live run to confirm the fix.
+
 ## Layout
 
 ```
