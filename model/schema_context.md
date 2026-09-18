@@ -270,6 +270,22 @@ ORDER BY gross_margin DESC
 - State that approved change orders alter the contract value. dim_change_order holds 7 approved change orders worth 71,676.06 that ContractValue does not include, so the margin is understated for the jobs they belong to.
 - It excludes overhead as well: fact_job_cost holds direct job costs only.
 
+## Questions you must clarify before answering
+
+These have more than one reasonable reading, and the readings give different answers. Ask which is meant; do not pick one.
+
+### show me our biggest jobs, largest jobs, top jobs, most significant jobs, what are our biggest projects
+
+Readings:
+- by contract value -- dim_job.ContractValue
+- by actual cost booked to date -- sum of fact_job_cost.CostAmount
+- by budget -- sum of fact_job_budget.BudgetAmount
+- by duration -- StartDate to ActualEndDate, or to ScheduledEndDate if open
+
+The readings disagree, so the choice is not cosmetic. Ranked by contract value, budget or cost, the biggest job is J-202551; ranked by duration it is J-202509, and cost reorders second and third place as well.
+
+**Ask which is meant, and answer nothing until told. Naming the readings is the whole reply: no ranking, no top five, no "here it is by contract value in the meantime". Offering to drill in further AFTER giving a ranked answer is not asking -- that is answering with a follow-up question attached, and it is the failure this declaration exists to stop.**
+
 ## Questions this data cannot answer
 
 ### cost by region, which region is most profitable, revenue or margin by region, compare regions

@@ -192,7 +192,9 @@ cases:
     behaviour: clarify
     max_tool_calls: 1
     # Either it asks or it answers. A clarifying turn does not also deliver the
-    # answer, so it states no money figures.
+    # answer, so it states no money figures, and it names the readings it is asking
+    # between -- both declared in model.yaml under ambiguous_questions.
     states_no_money: true
+    mentions: [contract value, cost]
     # "Biggest" could mean contract value, total cost, budget, or duration, and the
     # four give different orderings. The model should ask which is meant.

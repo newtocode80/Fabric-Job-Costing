@@ -153,6 +153,24 @@ def render(model: dict) -> str:
         for note in pat.get("notes", []):
             w(f"- {flow(note)}")
 
+    if model.get("ambiguous_questions"):
+        w("")
+        w("## Questions you must clarify before answering")
+        w("")
+        w("These have more than one reasonable reading, and the readings give "
+          "different answers. Ask which is meant; do not pick one.")
+        for item in model["ambiguous_questions"]:
+            w("")
+            w(f"### {', '.join(item['question_shapes'])}")
+            w("")
+            w("Readings:")
+            for reading in item["readings"]:
+                w(f"- {flow(reading)}")
+            w("")
+            w(f"{flow(item['evidence'])}")
+            w("")
+            w(f"**{flow(item['instruction'])}**")
+
     w("")
     w("## Questions this data cannot answer")
     for ca in model.get("cannot_answer", []):

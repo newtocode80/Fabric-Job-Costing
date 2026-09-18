@@ -455,3 +455,44 @@ between them. That is tuning to the fixture, not a rule.
 warn to FAIL, because 19 is arithmetic on two cited figures. By the check's own
 logic that is correct — computing with a prompt figure is the failure mode — but it
 is a harmless sentence in practice, and is the owner's to overrule.
+
+## The last two failures, diagnosed from the run
+
+### labour_cost_total: a fabricated figure sitting next to the correct one
+
+The answer says the two DQ1 duplicates "double-count $347.30 of labour cost", then
+in the very next clause says "the true labour spend is likely **$346.65** lower".
+
+Checked against the data: both duplicate rows (CostID 807 at 294.00, CostID 3224 at
+53.30) are Labour, and they total **exactly 347.30**. `346.65` appears nowhere in
+`fact_job_cost`, is not half of 347.30, and is not a derivation of anything. The
+model had already stated the right number one sentence earlier and then contradicted
+itself by 65 cents.
+
+This is the strongest case yet for the check: a human reader skims straight past a
+figure that looks like the one above it. No prompt change is proposed -- the rule
+already forbids it, and the check caught it.
+
+### biggest_jobs: rule 5 was never triggered
+
+The third occurrence was not the model ignoring rule 5. It never treated the
+question as ambiguous at all: it picked contract value, gave a ranked top 20, and
+closed with "would you like to drill into any of these jobs?" -- a follow-up offer,
+not a clarification.
+
+**Same structural bug as `profit_by_job`:** the eval encoded "this question is
+ambiguous" and the prompt never said so. Sharpening rule 5 a fourth time would not
+have helped, because rule 5 only applies once the model has decided a question is
+ambiguous.
+
+`model.yaml` now has an `ambiguous_questions` section declaring the question shapes,
+the four readings, and the evidence that they disagree -- by contract value, budget
+or cost the biggest job is J-202551; by duration it is J-202509. The instruction
+names the exact observed failure: offering to drill in after giving a ranked answer
+is not asking.
+
+| # | Decision | Why |
+|---|---|---|
+| 60 | Ambiguity is **declared in model.yaml**, not left to the model to notice. | Twice now an eval has encoded a rule the prompt never stated. Declaring it is the pattern that fixed `profit_by_job`. |
+| 61 | The declaration carries **evidence that the readings disagree**. | If they all gave the same answer the question would not be ambiguous. The evidence was measured, not assumed. |
+| 62 | The eval checks the answer names at least two readings, not just that it contains a "?". | A trailing "would you like more?" satisfies a question mark. It does not satisfy asking which was meant. |
