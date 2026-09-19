@@ -2,7 +2,7 @@
   {
     "id": "total_cost_by_cost_type",
     "question": "What is our total cost by cost type?",
-    "answer": "Here's a breakdown of total actual costs across all jobs by cost type:\n\n**Material** is by far the largest category at **$4,497,901.88**, accounting for the bulk of spending across 3,911 transactions. **Labour** comes in second at **$1,715,039.31** across 4,677 transactions \u2014 the most active category in terms of transaction volume. **Subcontractor** costs total **$1,012,933.82** from 1,227 transactions, and **Equipment** is the smallest category at **$458,977.80** from 550 transactions.\n\nThe combined total across all four cost types is **$7,684,852.81**.\n\nA couple of caveats worth noting:\n- **DQ1:** Two duplicate cost rows (CostIDs 807 and 3224) each carry a different EmployeeKey on the two copies but the same CostAmount, meaning **$347.30 is double-counted** in the totals above.\n- **DQ2:** 30 cost rows totalling **$16,882.98** belong to job keys that don't exist in the job dimension, so they are included in the totals here but cannot be attributed to a named job.",
+    "answer": "Here is the total actual cost broken down by cost type across all 10,365 transactions:\n\n- **Material:** $4,497,901.88 (3,911 transactions) \u2014 by far the largest category, making up the bulk of spend.\n- **Labour:** $1,715,039.31 (4,677 transactions) \u2014 the highest volume of transactions, but lower in dollar terms than Material.\n- **Subcontractor:** $1,012,933.82 (1,227 transactions)\n- **Equipment:** $458,977.80 (550 transactions) \u2014 the smallest category.\n\n**Grand total across all cost types: $7,684,852.81.**\n\nA couple of data quality notes worth bearing in mind:\n\n- **DQ1:** Two duplicate cost rows (CostIDs 807 and 3224) mean the total is overstated by $347.30 due to a failed upstream merge.\n- **DQ2:** 30 cost rows (worth $16,882.98) reference job keys that don't exist in the job dimension, so those costs are included here in the overall total but cannot be attributed to a specific job.",
     "error": null,
     "tool_calls": [
       {
@@ -58,7 +58,7 @@
   {
     "id": "total_contract_value",
     "question": "What is the total contract value of all our jobs?",
-    "answer": "The total contract value across all 52 jobs is **$9,920,000.00**.\n\nA couple of things worth keeping in mind:\n\n- **Approved change orders are not included** in this figure. There are 7 approved change orders in the system worth an additional $71,676.06 that sit outside the base contract values recorded on the jobs.\n- **4 jobs are still Active**, meaning their contracts are in progress and costs are still being incurred against them.",
+    "answer": "The total contract value across all 52 jobs is **$9,920,000.00**.\n\nA couple of things worth keeping in mind:\n\n- **Approved change orders are not included** in this figure. There are 7 approved change orders in the system worth an additional $71,676.06 that sit outside the base contract values recorded on the job records.\n- This is the **contracted value**, not recognised revenue \u2014 the model holds no billing or invoicing data.",
     "error": null,
     "tool_calls": [
       {
@@ -86,7 +86,7 @@
   {
     "id": "labour_cost_total",
     "question": "How much have we spent on labour?",
-    "answer": "Total labour spend across all jobs is **$1,715,039.31**.\n\nA couple of things worth knowing about this figure:\n\n- **It covers all labour cost rows in the system**, regardless of which job they're booked to \u2014 including 30 cost rows linked to job keys that don't exist in the job dimension (a known data quality issue, DQ2).\n- **It includes two duplicate cost rows** (DQ1) that together double-count $347.30 of labour cost. The true labour spend is likely $346.65 lower, though correcting that would require a data fix upstream.\n\nIf you'd like the labour spend broken down by job, cost period, employee, or anything else, just ask.",
+    "answer": "In total, **$1,715,039.31** has been spent on Labour across all jobs.\n\nA couple of things worth noting:\n- This covers all 10,365 cost rows and is not filtered by job or date, so it reflects everything booked to date.\n- Due to data quality issue DQ1, two cost transactions (CostID 807 and CostID 3224) are duplicated in the source data, which means a small amount \u2014 $347.30 in total across both duplicates \u2014 may be double-counted in the overall cost figures. It is unlikely to materially affect this labour total, but worth being aware of.\n\nWould you like this broken down further \u2014 for example by job, by employee, or by time period?",
     "error": null,
     "tool_calls": [
       {
@@ -114,7 +114,7 @@
   {
     "id": "approved_change_order_value",
     "question": "What is the total value of approved change orders?",
-    "answer": "The total value of approved change orders is **$71,676.06**. This covers the 7 change orders that have a Status of \"Approved\" \u2014 the remaining 19 change orders (11 Pending and 8 Rejected) are excluded from this figure.\n\nOne thing worth noting: this approved value is not yet reflected in the `ContractValue` field on the job dimension, so any margin analysis based on `ContractValue` will understate the true contract value for the jobs those change orders belong to.",
+    "answer": "The total value of approved change orders is **$71,676.06**, across the 7 change orders with a status of \"Approved.\" \n\nA couple of things worth keeping in mind:\n- The remaining 19 change orders (11 Pending, 8 Rejected) are excluded from this figure.\n- This approved value is **not yet reflected in the ContractValue figures on dim_job**, so any contract value or gross margin calculations will be understated for the jobs those approved change orders belong to.",
     "error": null,
     "tool_calls": [
       {
@@ -142,7 +142,7 @@
   {
     "id": "cost_for_one_job",
     "question": "How much has job J-202505 cost so far?",
-    "answer": "Job **J-202505 \u2013 Fit-Out Phas\u00e9 2** has accumulated a total actual cost of **$337,661.61**. The job's status is **Complete**.\n\nA couple of notes for context:\n- This figure comes directly from all cost transactions recorded against the job in `fact_job_cost`. It covers all cost types (Labour, Materials, Subcontractors, Equipment) but represents direct job costs only \u2014 no overhead is included in this model.\n- If you'd like a breakdown by cost type, or a comparison against the budget, just ask!",
+    "answer": "Job **J-202505 \u2013 Fit-Out Phas\u00e9 2** has accumulated a total actual cost of **$337,661.61**. The job is currently marked as **Complete**.\n\nA couple of things worth noting:\n- This figure comes from directly matching cost rows to the job, so it excludes the 30 cost rows that reference unknown job keys (data quality issue DQ2) \u2014 but those don't belong to J-202505, so this total is not affected by that issue.\n- If you'd like to compare this against the budget or the contract value, just ask!",
     "error": null,
     "tool_calls": [
       {
@@ -176,20 +176,19 @@
   {
     "id": "cost_by_client",
     "question": "Which client has cost us the most?",
-    "answer": "**Ouellette Manufacturing** is the most costly client, with **$1,375,630.09** in actual costs across 7 jobs \u2014 well ahead of second-place Beauchemin Construction at $1,151,064.39.\n\nA couple of things worth flagging:\n\n- **\"Rivard Industrial\" and \"Rivard Ind.\"** appear as separate clients in the data but are almost certainly the same company. If you combine them, their combined cost would be **$815,892.01**, which would push them to third place overall ahead of Cardinal Real Estate.\n\n- **$16,882.98 of cost cannot be attributed to any client** (shown as \"unknown\"). This is a known data quality issue (DQ2): 30 cost rows reference job IDs that don't exist in the job dimension, so there's no client name to attach them to.\n\n- There is also a minor double-counting issue (DQ1): two duplicate cost records inflate the grand total by $347.30, so the figures above are very slightly overstated across the board, though not enough to change the ranking.",
+    "answer": "**Ouellette Manufacturing** has accumulated the highest actual cost at **$1,375,630.09**, followed by Beauchemin Construction at $1,151,064.39 and Meridian Foods at $1,140,050.48.\n\nA couple of things worth flagging:\n\n1. **Possible duplicate client name:** \"Rivard Industrial\" ($460,562.57) and \"Rivard Ind.\" ($355,329.44) appear as separate entries but almost certainly represent the same client. If they are the same, their combined cost would be $815,892.01 \u2014 which would push them up to fourth place, just below Cardinal Real Estate.\n\n2. **Data quality caveat (DQ2):** 30 cost transactions totalling $16,882.98 reference job keys that don't exist in the job dimension, so they can't be linked to any client and are excluded from these figures. The true total cost by client is understated by that amount, though it's unlikely to change the ranking at the top.",
     "error": null,
     "tool_calls": [
       {
-        "sql": "\nSELECT\n    COALESCE(j.ClientName, '(unknown \u2013 no matching job)') AS client,\n    CAST(SUM(fc.CostAmount) AS DECIMAL(18,2)) AS total_cost,\n    COUNT(DISTINCT j.JobKey) AS job_count\nFROM fact_job_cost fc\nLEFT JOIN dim_job j ON j.JobKey = fc.JobKey\nGROUP BY j.ClientName\nORDER BY total_cost DESC\n",
-        "executed_sql": "\nSELECT\n    COALESCE(j.ClientName, '(unknown \u2013 no matching job)') AS client,\n    CAST(SUM(fc.CostAmount) AS DECIMAL(18,2)) AS total_cost,\n    COUNT(DISTINCT j.JobKey) AS job_count\nFROM fact_job_cost fc\nLEFT JOIN dim_job j ON j.JobKey = fc.JobKey\nGROUP BY j.ClientName\nORDER BY total_cost DESC\nLIMIT 500",
+        "sql": "\nSELECT\n    j.ClientName,\n    CAST(SUM(c.CostAmount) AS DECIMAL(18,2)) AS total_actual_cost\nFROM fact_job_cost c\nINNER JOIN dim_job j ON c.JobKey = j.JobKey\nGROUP BY j.ClientName\nORDER BY total_actual_cost DESC\n",
+        "executed_sql": "\nSELECT\n    j.ClientName,\n    CAST(SUM(c.CostAmount) AS DECIMAL(18,2)) AS total_actual_cost\nFROM fact_job_cost c\nINNER JOIN dim_job j ON c.JobKey = j.JobKey\nGROUP BY j.ClientName\nORDER BY total_actual_cost DESC\nLIMIT 500",
         "ok": true,
         "rejected": false,
         "clamped_from": null,
         "truncated": false,
         "columns": [
-          "client",
-          "total_cost",
-          "job_count"
+          "ClientName",
+          "total_actual_cost"
         ],
         "rows": [
           [
@@ -197,96 +196,77 @@
             {
               "__t": "decimal",
               "v": "1375630.09"
-            },
-            7
+            }
           ],
           [
             "Beauchemin Construction",
             {
               "__t": "decimal",
               "v": "1151064.39"
-            },
-            6
+            }
           ],
           [
             "Meridian Foods",
             {
               "__t": "decimal",
               "v": "1140050.48"
-            },
-            8
+            }
           ],
           [
             "Cardinal Real Estate",
             {
               "__t": "decimal",
               "v": "844576.66"
-            },
-            6
+            }
           ],
           [
             "ACME Corp",
             {
               "__t": "decimal",
               "v": "601895.15"
-            },
-            4
+            }
           ],
           [
             "Northgate Properties",
             {
               "__t": "decimal",
               "v": "524189.66"
-            },
-            4
+            }
           ],
           [
             "Halcyon Developments",
             {
               "__t": "decimal",
               "v": "514103.91"
-            },
-            3
+            }
           ],
           [
             "Rivard Industrial",
             {
               "__t": "decimal",
               "v": "460562.57"
-            },
-            4
+            }
           ],
           [
             "Perrault Group",
             {
               "__t": "decimal",
               "v": "356629.75"
-            },
-            4
+            }
           ],
           [
             "Rivard Ind.",
             {
               "__t": "decimal",
               "v": "355329.44"
-            },
-            3
+            }
           ],
           [
             "Steelhead Logistics",
             {
               "__t": "decimal",
               "v": "343937.73"
-            },
-            3
-          ],
-          [
-            "(unknown \u2013 no matching job)",
-            {
-              "__t": "decimal",
-              "v": "16882.98"
-            },
-            0
+            }
           ]
         ],
         "error": null
@@ -296,18 +276,18 @@
   {
     "id": "labour_hours_by_trade",
     "question": "How many labour hours have we booked by trade?",
-    "answer": "Here's a breakdown of all labour hours booked, ranked by volume:\n\n- **Apprentice** \u2014 10,085.00 hours across 1,186 cost rows\n- **Foreman** \u2014 8,871.90 hours across 1,340 cost rows\n- **Sheet Metal** \u2014 6,522.80 hours across 855 cost rows\n- **Pipefitter** \u2014 4,991.40 hours across 703 cost rows\n- **Electrician** \u2014 3,931.70 hours across 553 cost rows\n\nApprentices have booked the most hours by a clear margin, despite Foremen having the most individual cost entries \u2014 suggesting Foremen are logging shorter or more fragmented shifts on average.\n\n**One caveat to note:** 40 labour cost rows (303.90 hours) have no EmployeeKey linked to them, so they cannot be attributed to any trade. These are shown separately as \"no employee linked\" and represent a small but real gap in the data (data quality issue DQ1/the NULL EmployeeKey pattern described in the model). If you want a clean total including those hours, the grand sum across all rows is available \u2014 just ask.",
+    "answer": "Here is the breakdown of booked labour hours by trade:\n\n- **Apprentice** \u2014 10,085.00 hours across 1,186 rows (the highest volume)\n- **Foreman** \u2014 8,871.90 hours across 1,340 rows\n- **Sheet Metal** \u2014 6,522.80 hours across 855 rows\n- **Pipefitter** \u2014 4,991.40 hours across 703 rows\n- **Electrician** \u2014 3,931.70 hours across 553 rows\n- **Unlinked (no trade)** \u2014 303.90 hours across 40 rows\n\nA couple of things worth noting:\n\n1. **Foremen have the most individual cost rows but fewer total hours than Apprentices**, suggesting Foremen book shorter or more fragmented time entries on average.\n2. **303.90 hours (40 rows) cannot be attributed to any trade.** These are Labour cost rows where the EmployeeKey is NULL \u2014 a known data quality gap (DQ1-related). Those hours are real cost but have no employee or trade attached in the source system.\n\nIf you'd like to drill into any specific trade or look at hours by job or time period, just ask.",
     "error": null,
     "tool_calls": [
       {
-        "sql": "\nSELECT\n    COALESCE(e.Trade, '(no employee linked)') AS trade,\n    COUNT(*) AS labour_rows,\n    CAST(SUM(f.Hours) AS DECIMAL(18,2)) AS total_hours\nFROM fact_job_cost f\nLEFT JOIN dim_employee e\n    ON CAST(f.EmployeeKey AS INTEGER) = e.EmployeeKey\nWHERE f.CostType = 'Labour'\nGROUP BY e.Trade\nORDER BY total_hours DESC\n",
-        "executed_sql": "\nSELECT\n    COALESCE(e.Trade, '(no employee linked)') AS trade,\n    COUNT(*) AS labour_rows,\n    CAST(SUM(f.Hours) AS DECIMAL(18,2)) AS total_hours\nFROM fact_job_cost f\nLEFT JOIN dim_employee e\n    ON CAST(f.EmployeeKey AS INTEGER) = e.EmployeeKey\nWHERE f.CostType = 'Labour'\nGROUP BY e.Trade\nORDER BY total_hours DESC\nLIMIT 500",
+        "sql": "\nSELECT\n    coalesce(e.Trade, '(No trade / unlinked)') AS Trade,\n    COUNT(*) AS labour_rows,\n    CAST(sum(f.Hours) AS DECIMAL(18,2)) AS total_hours\nFROM fact_job_cost f\nLEFT JOIN dim_employee e\n    ON CAST(f.EmployeeKey AS INTEGER) = e.EmployeeKey\nWHERE f.CostType = 'Labour'\nGROUP BY coalesce(e.Trade, '(No trade / unlinked)')\nORDER BY total_hours DESC\n",
+        "executed_sql": "\nSELECT\n    coalesce(e.Trade, '(No trade / unlinked)') AS Trade,\n    COUNT(*) AS labour_rows,\n    CAST(sum(f.Hours) AS DECIMAL(18,2)) AS total_hours\nFROM fact_job_cost f\nLEFT JOIN dim_employee e\n    ON CAST(f.EmployeeKey AS INTEGER) = e.EmployeeKey\nWHERE f.CostType = 'Labour'\nGROUP BY coalesce(e.Trade, '(No trade / unlinked)')\nORDER BY total_hours DESC\nLIMIT 500",
         "ok": true,
         "rejected": false,
         "clamped_from": null,
         "truncated": false,
         "columns": [
-          "trade",
+          "Trade",
           "labour_rows",
           "total_hours"
         ],
@@ -353,7 +333,7 @@
             }
           ],
           [
-            "(no employee linked)",
+            "(No trade / unlinked)",
             40,
             {
               "__t": "decimal",
@@ -368,12 +348,12 @@
   {
     "id": "cost_by_job_type",
     "question": "What does each job type cost us on average?",
-    "answer": "Here's how average actual cost breaks down across the three job types:\n\n**Mechanical** is the most expensive on average at **$193,898 per job** across 14 jobs, totalling $2.71M. **HVAC** comes in second at **$138,112 per job** across 16 jobs ($2.21M total). **Electrical** is the lowest per-job average at **$124,710**, though because there are 22 Electrical jobs it actually carries the highest total spend at $2.74M.\n\nA couple of caveats to keep in mind:\n\n- **Data quality (DQ2):** 30 cost rows worth $16,882.98 reference job keys that don't exist in the job dimension, so they can't be assigned to any job type. Those costs are excluded from all three figures above, meaning the averages are very slightly understated.\n- These are actual costs only. Contract values and budgets vary by job type too \u2014 if you'd like a margin or budget-vs-actual comparison by job type, just ask.",
+    "answer": "Here's the average actual cost per job, broken down by job type:\n\n- **Mechanical** jobs average **$193,898 each** across 14 jobs (total cost: $2,714,574)\n- **HVAC** jobs average **$138,112 each** across 16 jobs (total cost: $2,209,786)\n- **Electrical** jobs average **$124,710 each** across 22 jobs (total cost: $2,743,610)\n\nSo Mechanical is the most expensive job type on a per-job basis \u2014 running about 40% more than an average Electrical job \u2014 even though Electrical carries the most total spend, simply because there are more Electrical jobs in the portfolio.\n\n**One data quality note to be aware of:** 30 cost transactions worth $16,882.98 are linked to job IDs that don't exist in the job dimension (DQ2). Those rows cannot be attributed to any job type and are excluded from all three averages above, so the totals here will not reconcile to the overall cost grand total.",
     "error": null,
     "tool_calls": [
       {
-        "sql": "\nWITH job_cost AS (\n    SELECT JobKey, SUM(CostAmount) AS total_cost\n    FROM fact_job_cost\n    GROUP BY JobKey\n)\nSELECT\n    j.JobType,\n    COUNT(j.JobKey)                                             AS job_count,\n    CAST(AVG(COALESCE(jc.total_cost, 0)) AS DECIMAL(18,2))    AS avg_cost_per_job,\n    CAST(SUM(COALESCE(jc.total_cost, 0)) AS DECIMAL(18,2))    AS total_cost\nFROM dim_job j\nLEFT JOIN job_cost jc ON jc.JobKey = j.JobKey\nGROUP BY j.JobType\nORDER BY avg_cost_per_job DESC\n",
-        "executed_sql": "\nWITH job_cost AS (\n    SELECT JobKey, SUM(CostAmount) AS total_cost\n    FROM fact_job_cost\n    GROUP BY JobKey\n)\nSELECT\n    j.JobType,\n    COUNT(j.JobKey)                                             AS job_count,\n    CAST(AVG(COALESCE(jc.total_cost, 0)) AS DECIMAL(18,2))    AS avg_cost_per_job,\n    CAST(SUM(COALESCE(jc.total_cost, 0)) AS DECIMAL(18,2))    AS total_cost\nFROM dim_job j\nLEFT JOIN job_cost jc ON jc.JobKey = j.JobKey\nGROUP BY j.JobType\nORDER BY avg_cost_per_job DESC\nLIMIT 500",
+        "sql": "\nWITH job_cost AS (\n    SELECT JobKey, SUM(CostAmount) AS total_cost\n    FROM fact_job_cost\n    GROUP BY JobKey\n)\nSELECT\n    j.JobType,\n    COUNT(j.JobKey)                                AS job_count,\n    CAST(SUM(jc.total_cost) AS DECIMAL(18,2))      AS total_cost,\n    CAST(AVG(jc.total_cost) AS DECIMAL(18,2))      AS avg_cost_per_job\nFROM dim_job j\nLEFT JOIN job_cost jc ON jc.JobKey = j.JobKey\nGROUP BY j.JobType\nORDER BY avg_cost_per_job DESC\n",
+        "executed_sql": "\nWITH job_cost AS (\n    SELECT JobKey, SUM(CostAmount) AS total_cost\n    FROM fact_job_cost\n    GROUP BY JobKey\n)\nSELECT\n    j.JobType,\n    COUNT(j.JobKey)                                AS job_count,\n    CAST(SUM(jc.total_cost) AS DECIMAL(18,2))      AS total_cost,\n    CAST(AVG(jc.total_cost) AS DECIMAL(18,2))      AS avg_cost_per_job\nFROM dim_job j\nLEFT JOIN job_cost jc ON jc.JobKey = j.JobKey\nGROUP BY j.JobType\nORDER BY avg_cost_per_job DESC\nLIMIT 500",
         "ok": true,
         "rejected": false,
         "clamped_from": null,
@@ -381,8 +361,8 @@
         "columns": [
           "JobType",
           "job_count",
-          "avg_cost_per_job",
-          "total_cost"
+          "total_cost",
+          "avg_cost_per_job"
         ],
         "rows": [
           [
@@ -390,11 +370,11 @@
             14,
             {
               "__t": "decimal",
-              "v": "193898.12"
+              "v": "2714573.64"
             },
             {
               "__t": "decimal",
-              "v": "2714573.64"
+              "v": "193898.12"
             }
           ],
           [
@@ -402,11 +382,11 @@
             16,
             {
               "__t": "decimal",
-              "v": "138111.64"
+              "v": "2209786.29"
             },
             {
               "__t": "decimal",
-              "v": "2209786.29"
+              "v": "138111.64"
             }
           ],
           [
@@ -414,11 +394,11 @@
             22,
             {
               "__t": "decimal",
-              "v": "124709.54"
+              "v": "2743609.90"
             },
             {
               "__t": "decimal",
-              "v": "2743609.90"
+              "v": "124709.54"
             }
           ]
         ],
@@ -429,12 +409,12 @@
   {
     "id": "cost_quarter_over_quarter",
     "question": "How did our costs in the most recent quarter compare with the quarter before?",
-    "answer": "Here is what the data shows, with an important caveat upfront.\n\n**The most recent quarter (Q3 2026) is incomplete.** Cost records run from 1 July to 24 September 2026 \u2014 six days short of the quarter's end \u2014 so the Q3 figure under-represents the full quarter's spend.\n\nWith that flag clearly stated, the numbers are:\n\n- **Q2 2026 (full quarter):** $708,832.87 across all cost types\n- **Q3 2026 (partial, through 24 Sep):** $159,741.42\n- **Change:** \u2013$549,091.45, or **\u201377.5%** quarter-on-quarter\n\nThat is a very large drop, but given that Q3 is missing the last week of the quarter, a straight percentage comparison overstates the decline. Even if you scaled Q3 costs proportionally for those missing days, the run rate still appears substantially lower than Q2 \u2014 but to be precise you would need the full quarter's data.\n\n**Two additional data quality points to keep in mind:**\n- A known duplicate issue (DQ1) means total cost across the dataset is overstated by $347.30. At these aggregation levels that is immaterial, but it is a known defect.\n- These figures cover all 10,365 cost rows including 30 rows whose job keys don't exist in the job dimension (DQ2), so the totals are the full picture of costs recorded, not just those attributable to known jobs.\n\nIn short: Q2 2026 was a significantly heavier spending quarter than Q3, but treat Q3 as provisional until you can confirm the data is complete through 30 September.",
+    "answer": "Here is what the data shows, with an important caveat up front.\n\n**Overall totals**\nThe most recent quarter in the cost data is Q3 2026 (July\u2013September), with total costs of **$159,741.42** across 213 transaction rows. The prior quarter, Q2 2026 (April\u2013June), recorded **$708,832.87** across 1,072 rows. That is a very large drop \u2014 but see the caveat below before drawing conclusions.\n\n**By cost type**\n\nQ2 2026 vs Q3 2026:\n- Material: $387,310.68 \u2192 $87,422.79\n- Labour: $178,914.15 \u2192 $36,316.76\n- Subcontractor: $109,906.63 \u2192 $23,969.19\n- Equipment: $32,701.41 \u2192 $12,032.68\n\nEvery cost type fell sharply.\n\n**Critical caveat \u2014 Q3 2026 is almost certainly incomplete**\nQ3 spans July through September 2026. The transaction count (213 rows vs. 1,072 in Q2) and the cost drop are consistent with the data covering only the early weeks of Q3, not the full quarter. The calendar dimension extends to December 2026, but that tells us nothing about how far actual cost transactions run. You should confirm the extract date before treating this as a genuine quarter-on-quarter decline rather than a data cut-off artefact.\n\nOne additional note: 30 cost rows worth $16,882.98 in the overall dataset have job keys not present in the job dimension (a known data quality issue), so job-level attribution is incomplete \u2014 but the quarter totals above include all cost rows regardless, so the totals themselves are unaffected by that issue.",
     "error": null,
     "tool_calls": [
       {
-        "sql": "\nWITH costs_by_quarter AS (\n    SELECT\n        d.Year,\n        d.Quarter,\n        CAST(SUM(f.CostAmount) AS DECIMAL(18,2)) AS total_cost\n    FROM fact_job_cost f\n    JOIN dim_date d ON CAST(f.CostDate AS DATE) = CAST(d.Date AS DATE)\n    GROUP BY d.Year, d.Quarter\n),\nranked AS (\n    SELECT *,\n        ROW_NUMBER() OVER (ORDER BY Year DESC, CAST(Quarter AS INTEGER) DESC) AS rn\n    FROM costs_by_quarter\n)\nSELECT Year, Quarter, total_cost\nFROM ranked\nWHERE rn <= 2\nORDER BY Year DESC, CAST(Quarter AS INTEGER) DESC\n",
-        "executed_sql": "\nWITH costs_by_quarter AS (\n    SELECT\n        d.Year,\n        d.Quarter,\n        CAST(SUM(f.CostAmount) AS DECIMAL(18,2)) AS total_cost\n    FROM fact_job_cost f\n    JOIN dim_date d ON CAST(f.CostDate AS DATE) = CAST(d.Date AS DATE)\n    GROUP BY d.Year, d.Quarter\n),\nranked AS (\n    SELECT *,\n        ROW_NUMBER() OVER (ORDER BY Year DESC, CAST(Quarter AS INTEGER) DESC) AS rn\n    FROM costs_by_quarter\n)\nSELECT Year, Quarter, total_cost\nFROM ranked\nWHERE rn <= 2\nORDER BY Year DESC, CAST(Quarter AS INTEGER) DESC\nLIMIT 500",
+        "sql": "\nWITH costs_by_quarter AS (\n    SELECT\n        d.Year,\n        d.Quarter,\n        CAST(d.Year AS INTEGER) * 10 + CAST(d.Quarter AS INTEGER) AS sort_key,\n        CAST(SUM(f.CostAmount) AS DECIMAL(18,2)) AS total_cost,\n        COUNT(*) AS transaction_rows\n    FROM fact_job_cost f\n    JOIN dim_date d\n        ON CAST(f.CostDate AS DATE) = CAST(d.Date AS DATE)\n    GROUP BY d.Year, d.Quarter\n),\nranked AS (\n    SELECT *,\n        ROW_NUMBER() OVER (ORDER BY sort_key DESC) AS rn\n    FROM costs_by_quarter\n)\nSELECT Year, Quarter, total_cost, transaction_rows, rn\nFROM ranked\nWHERE rn <= 2\nORDER BY rn\n",
+        "executed_sql": "\nWITH costs_by_quarter AS (\n    SELECT\n        d.Year,\n        d.Quarter,\n        CAST(d.Year AS INTEGER) * 10 + CAST(d.Quarter AS INTEGER) AS sort_key,\n        CAST(SUM(f.CostAmount) AS DECIMAL(18,2)) AS total_cost,\n        COUNT(*) AS transaction_rows\n    FROM fact_job_cost f\n    JOIN dim_date d\n        ON CAST(f.CostDate AS DATE) = CAST(d.Date AS DATE)\n    GROUP BY d.Year, d.Quarter\n),\nranked AS (\n    SELECT *,\n        ROW_NUMBER() OVER (ORDER BY sort_key DESC) AS rn\n    FROM costs_by_quarter\n)\nSELECT Year, Quarter, total_cost, transaction_rows, rn\nFROM ranked\nWHERE rn <= 2\nORDER BY rn\nLIMIT 500",
         "ok": true,
         "rejected": false,
         "clamped_from": null,
@@ -442,7 +422,9 @@
         "columns": [
           "Year",
           "Quarter",
-          "total_cost"
+          "total_cost",
+          "transaction_rows",
+          "rn"
         ],
         "rows": [
           [
@@ -451,7 +433,9 @@
             {
               "__t": "decimal",
               "v": "159741.42"
-            }
+            },
+            213,
+            1
           ],
           [
             "2026",
@@ -459,69 +443,187 @@
             {
               "__t": "decimal",
               "v": "708832.87"
+            },
+            1072,
+            2
+          ]
+        ],
+        "error": null
+      },
+      {
+        "sql": "\nWITH costs_by_quarter_type AS (\n    SELECT\n        d.Year,\n        d.Quarter,\n        CAST(d.Year AS INTEGER) * 10 + CAST(d.Quarter AS INTEGER) AS sort_key,\n        f.CostType,\n        CAST(SUM(f.CostAmount) AS DECIMAL(18,2)) AS total_cost\n    FROM fact_job_cost f\n    JOIN dim_date d\n        ON CAST(f.CostDate AS DATE) = CAST(d.Date AS DATE)\n    GROUP BY d.Year, d.Quarter, f.CostType\n),\nranked_quarters AS (\n    SELECT DISTINCT Year, Quarter, sort_key,\n        ROW_NUMBER() OVER (ORDER BY sort_key DESC) AS rn\n    FROM costs_by_quarter_type\n)\nSELECT\n    c.Year,\n    c.Quarter,\n    c.CostType,\n    c.total_cost\nFROM costs_by_quarter_type c\nJOIN ranked_quarters r ON r.Year = c.Year AND r.Quarter = c.Quarter\nWHERE r.rn <= 2\nORDER BY r.rn, c.CostType\n",
+        "executed_sql": "\nWITH costs_by_quarter_type AS (\n    SELECT\n        d.Year,\n        d.Quarter,\n        CAST(d.Year AS INTEGER) * 10 + CAST(d.Quarter AS INTEGER) AS sort_key,\n        f.CostType,\n        CAST(SUM(f.CostAmount) AS DECIMAL(18,2)) AS total_cost\n    FROM fact_job_cost f\n    JOIN dim_date d\n        ON CAST(f.CostDate AS DATE) = CAST(d.Date AS DATE)\n    GROUP BY d.Year, d.Quarter, f.CostType\n),\nranked_quarters AS (\n    SELECT DISTINCT Year, Quarter, sort_key,\n        ROW_NUMBER() OVER (ORDER BY sort_key DESC) AS rn\n    FROM costs_by_quarter_type\n)\nSELECT\n    c.Year,\n    c.Quarter,\n    c.CostType,\n    c.total_cost\nFROM costs_by_quarter_type c\nJOIN ranked_quarters r ON r.Year = c.Year AND r.Quarter = c.Quarter\nWHERE r.rn <= 2\nORDER BY r.rn, c.CostType\nLIMIT 500",
+        "ok": true,
+        "rejected": false,
+        "clamped_from": null,
+        "truncated": false,
+        "columns": [
+          "Year",
+          "Quarter",
+          "CostType",
+          "total_cost"
+        ],
+        "rows": [
+          [
+            "2026",
+            "3",
+            "Equipment",
+            {
+              "__t": "decimal",
+              "v": "12032.68"
+            }
+          ],
+          [
+            "2026",
+            "3",
+            "Labour",
+            {
+              "__t": "decimal",
+              "v": "36316.76"
+            }
+          ],
+          [
+            "2026",
+            "3",
+            "Material",
+            {
+              "__t": "decimal",
+              "v": "87422.79"
+            }
+          ],
+          [
+            "2026",
+            "3",
+            "Subcontractor",
+            {
+              "__t": "decimal",
+              "v": "23969.19"
+            }
+          ],
+          [
+            "2026",
+            "3",
+            "Equipment",
+            {
+              "__t": "decimal",
+              "v": "12032.68"
+            }
+          ],
+          [
+            "2026",
+            "3",
+            "Labour",
+            {
+              "__t": "decimal",
+              "v": "36316.76"
+            }
+          ],
+          [
+            "2026",
+            "3",
+            "Material",
+            {
+              "__t": "decimal",
+              "v": "87422.79"
+            }
+          ],
+          [
+            "2026",
+            "3",
+            "Subcontractor",
+            {
+              "__t": "decimal",
+              "v": "23969.19"
             }
           ]
         ],
         "error": null
       },
       {
-        "sql": "\nWITH costs_by_quarter AS (\n    SELECT\n        d.Year,\n        d.Quarter,\n        SUM(f.CostAmount) AS total_cost\n    FROM fact_job_cost f\n    JOIN dim_date d ON CAST(f.CostDate AS DATE) = CAST(d.Date AS DATE)\n    GROUP BY d.Year, d.Quarter\n),\nranked AS (\n    SELECT *,\n        ROW_NUMBER() OVER (ORDER BY Year DESC, CAST(Quarter AS INTEGER) DESC) AS rn\n    FROM costs_by_quarter\n),\nrecent AS (\n    SELECT MAX(CASE WHEN rn = 1 THEN total_cost END) AS current_q,\n           MAX(CASE WHEN rn = 2 THEN total_cost END) AS prior_q\n    FROM ranked\n    WHERE rn <= 2\n)\nSELECT\n    CAST(current_q AS DECIMAL(18,2))                                          AS q3_2026_cost,\n    CAST(prior_q   AS DECIMAL(18,2))                                          AS q2_2026_cost,\n    CAST(current_q - prior_q AS DECIMAL(18,2))                                AS change,\n    CAST(ROUND((current_q - prior_q) / prior_q * 100, 1) AS DECIMAL(18,1))   AS pct_change\nFROM recent\n",
-        "executed_sql": "\nWITH costs_by_quarter AS (\n    SELECT\n        d.Year,\n        d.Quarter,\n        SUM(f.CostAmount) AS total_cost\n    FROM fact_job_cost f\n    JOIN dim_date d ON CAST(f.CostDate AS DATE) = CAST(d.Date AS DATE)\n    GROUP BY d.Year, d.Quarter\n),\nranked AS (\n    SELECT *,\n        ROW_NUMBER() OVER (ORDER BY Year DESC, CAST(Quarter AS INTEGER) DESC) AS rn\n    FROM costs_by_quarter\n),\nrecent AS (\n    SELECT MAX(CASE WHEN rn = 1 THEN total_cost END) AS current_q,\n           MAX(CASE WHEN rn = 2 THEN total_cost END) AS prior_q\n    FROM ranked\n    WHERE rn <= 2\n)\nSELECT\n    CAST(current_q AS DECIMAL(18,2))                                          AS q3_2026_cost,\n    CAST(prior_q   AS DECIMAL(18,2))                                          AS q2_2026_cost,\n    CAST(current_q - prior_q AS DECIMAL(18,2))                                AS change,\n    CAST(ROUND((current_q - prior_q) / prior_q * 100, 1) AS DECIMAL(18,1))   AS pct_change\nFROM recent\nLIMIT 500",
+        "sql": "\nSELECT\n    d.Year,\n    d.Quarter,\n    f.CostType,\n    CAST(SUM(f.CostAmount) AS DECIMAL(18,2)) AS total_cost\nFROM fact_job_cost f\nJOIN dim_date d\n    ON CAST(f.CostDate AS DATE) = CAST(d.Date AS DATE)\nWHERE (d.Year = '2026' AND d.Quarter = '2')\n   OR (d.Year = '2026' AND d.Quarter = '3')\nGROUP BY d.Year, d.Quarter, f.CostType\nORDER BY d.Quarter, f.CostType\n",
+        "executed_sql": "\nSELECT\n    d.Year,\n    d.Quarter,\n    f.CostType,\n    CAST(SUM(f.CostAmount) AS DECIMAL(18,2)) AS total_cost\nFROM fact_job_cost f\nJOIN dim_date d\n    ON CAST(f.CostDate AS DATE) = CAST(d.Date AS DATE)\nWHERE (d.Year = '2026' AND d.Quarter = '2')\n   OR (d.Year = '2026' AND d.Quarter = '3')\nGROUP BY d.Year, d.Quarter, f.CostType\nORDER BY d.Quarter, f.CostType\nLIMIT 500",
         "ok": true,
         "rejected": false,
         "clamped_from": null,
         "truncated": false,
         "columns": [
-          "q3_2026_cost",
-          "q2_2026_cost",
-          "change",
-          "pct_change"
+          "Year",
+          "Quarter",
+          "CostType",
+          "total_cost"
         ],
         "rows": [
           [
+            "2026",
+            "2",
+            "Equipment",
             {
               "__t": "decimal",
-              "v": "159741.42"
-            },
-            {
-              "__t": "decimal",
-              "v": "708832.87"
-            },
-            {
-              "__t": "decimal",
-              "v": "-549091.45"
-            },
-            {
-              "__t": "decimal",
-              "v": "-77.5"
+              "v": "32701.41"
             }
-          ]
-        ],
-        "error": null
-      },
-      {
-        "sql": "\nSELECT\n    CAST(MIN(CostDate) AS DATE) AS earliest_q3_date,\n    CAST(MAX(CostDate) AS DATE) AS latest_q3_date,\n    COUNT(*) AS row_count\nFROM fact_job_cost\nWHERE CAST(CostDate AS DATE) >= DATE '2026-07-01'\n  AND CAST(CostDate AS DATE) <= DATE '2026-09-30'\n",
-        "executed_sql": "\nSELECT\n    CAST(MIN(CostDate) AS DATE) AS earliest_q3_date,\n    CAST(MAX(CostDate) AS DATE) AS latest_q3_date,\n    COUNT(*) AS row_count\nFROM fact_job_cost\nWHERE CAST(CostDate AS DATE) >= DATE '2026-07-01'\n  AND CAST(CostDate AS DATE) <= DATE '2026-09-30'\nLIMIT 500",
-        "ok": true,
-        "rejected": false,
-        "clamped_from": null,
-        "truncated": false,
-        "columns": [
-          "earliest_q3_date",
-          "latest_q3_date",
-          "row_count"
-        ],
-        "rows": [
+          ],
           [
+            "2026",
+            "2",
+            "Labour",
             {
-              "__t": "date",
-              "v": "2026-07-01"
-            },
+              "__t": "decimal",
+              "v": "178914.15"
+            }
+          ],
+          [
+            "2026",
+            "2",
+            "Material",
             {
-              "__t": "date",
-              "v": "2026-09-24"
-            },
-            213
+              "__t": "decimal",
+              "v": "387310.68"
+            }
+          ],
+          [
+            "2026",
+            "2",
+            "Subcontractor",
+            {
+              "__t": "decimal",
+              "v": "109906.63"
+            }
+          ],
+          [
+            "2026",
+            "3",
+            "Equipment",
+            {
+              "__t": "decimal",
+              "v": "12032.68"
+            }
+          ],
+          [
+            "2026",
+            "3",
+            "Labour",
+            {
+              "__t": "decimal",
+              "v": "36316.76"
+            }
+          ],
+          [
+            "2026",
+            "3",
+            "Material",
+            {
+              "__t": "decimal",
+              "v": "87422.79"
+            }
+          ],
+          [
+            "2026",
+            "3",
+            "Subcontractor",
+            {
+              "__t": "decimal",
+              "v": "23969.19"
+            }
           ]
         ],
         "error": null
@@ -531,31 +633,25 @@
   {
     "id": "change_orders_by_quarter",
     "question": "Are we raising more change orders this year than last year?",
-    "answer": "The data covers three calendar years. Here is a plain summary of what came back:\n\n**2024:** 1 change order submitted (all Approved), worth $12,446.52. This looks like a partial year \u2014 the data only begins in October 2024, so this single order is from Q4 2024.\n\n**2025:** 18 change orders submitted \u2014 6 Approved, 7 Pending, 5 Rejected \u2014 worth $291,649.30 in total across all statuses.\n\n**2026:** 7 change orders submitted so far \u2014 0 Approved, 4 Pending, 3 Rejected \u2014 worth $89,413.93.\n\n**So the direct answer depends on what \"this year\" means:**\n\n- If you're comparing **2025 vs. 2024**, yes \u2014 volume jumped sharply from 1 to 18.\n- If you're comparing **2026 vs. 2025**, then no \u2014 we're at 7 so far versus 18 for all of 2025. However, 2026 data may be a partial year (the dataset runs through end of 2026, but if we haven't reached year-end yet, the 2026 figure is incomplete and a like-for-like month comparison would be more meaningful).\n\nOne thing worth noting: the 2026 orders have zero approvals so far, with all 7 still Pending or Rejected. That's a notable shift from 2025, where a third of orders were approved. Would you like to dig into this further \u2014 for example, comparing volumes month by month, or looking at which jobs are generating the most change orders?",
+    "answer": "The data spans three calendar years, so rather than guess which is \"this year,\" here is the full picture so you can compare the right two:\n\n**2024:** 1 change order raised, totalling $12,446.52\n\n**2025:** 18 change orders raised, totalling $291,649.30\n\n**2026:** 7 change orders raised, totalling $89,413.93\n\nA few things worth noting:\n\n- If you are currently in **2025**, then yes \u2014 2025 saw a dramatic jump from 2024 (18 vs. 1 order). However, 2024 only has data from October onward (the data set starts 1 October 2024), so the 2024 figure covers just one quarter and is not a full-year comparison.\n- If you are currently in **2026**, the pace has slowed relative to all of 2025 (7 so far vs. 18 for the full year), though how far through 2026 we are would determine whether the rate is truly lower.\n- These totals include change orders of **all statuses** \u2014 Approved, Pending, and Rejected. If you want to compare only the ones that were approved (and therefore affect contract values), that would be a different cut.\n\nWould you like me to break any of these down further \u2014 by status, by job, or by project manager?",
     "error": null,
     "tool_calls": [
       {
-        "sql": "\nSELECT\n    YEAR(DateSubmitted) AS submission_year,\n    COUNT(*) AS total_change_orders,\n    SUM(CASE WHEN Status = 'Approved' THEN 1 ELSE 0 END) AS approved,\n    SUM(CASE WHEN Status = 'Pending' THEN 1 ELSE 0 END) AS pending,\n    SUM(CASE WHEN Status = 'Rejected' THEN 1 ELSE 0 END) AS rejected,\n    CAST(SUM(Amount) AS DECIMAL(18,2)) AS total_amount\nFROM dim_change_order\nGROUP BY YEAR(DateSubmitted)\nORDER BY submission_year\n",
-        "executed_sql": "\nSELECT\n    YEAR(DateSubmitted) AS submission_year,\n    COUNT(*) AS total_change_orders,\n    SUM(CASE WHEN Status = 'Approved' THEN 1 ELSE 0 END) AS approved,\n    SUM(CASE WHEN Status = 'Pending' THEN 1 ELSE 0 END) AS pending,\n    SUM(CASE WHEN Status = 'Rejected' THEN 1 ELSE 0 END) AS rejected,\n    CAST(SUM(Amount) AS DECIMAL(18,2)) AS total_amount\nFROM dim_change_order\nGROUP BY YEAR(DateSubmitted)\nORDER BY submission_year\nLIMIT 500",
+        "sql": "\nSELECT\n    YEAR(DateSubmitted) AS year_submitted,\n    COUNT(*) AS change_order_count,\n    CAST(SUM(Amount) AS DECIMAL(18,2)) AS total_amount\nFROM dim_change_order\nGROUP BY 1\nORDER BY 1\n",
+        "executed_sql": "\nSELECT\n    YEAR(DateSubmitted) AS year_submitted,\n    COUNT(*) AS change_order_count,\n    CAST(SUM(Amount) AS DECIMAL(18,2)) AS total_amount\nFROM dim_change_order\nGROUP BY 1\nORDER BY 1\nLIMIT 500",
         "ok": true,
         "rejected": false,
         "clamped_from": null,
         "truncated": false,
         "columns": [
-          "submission_year",
-          "total_change_orders",
-          "approved",
-          "pending",
-          "rejected",
+          "year_submitted",
+          "change_order_count",
           "total_amount"
         ],
         "rows": [
           [
             2024,
             1,
-            1,
-            0,
-            0,
             {
               "__t": "decimal",
               "v": "12446.52"
@@ -564,9 +660,6 @@
           [
             2025,
             18,
-            6,
-            7,
-            5,
             {
               "__t": "decimal",
               "v": "291649.30"
@@ -575,9 +668,6 @@
           [
             2026,
             7,
-            0,
-            4,
-            3,
             {
               "__t": "decimal",
               "v": "89413.93"
@@ -591,12 +681,12 @@
   {
     "id": "budget_vs_actual_by_job",
     "question": "Which jobs are over budget, and by how much?",
-    "answer": "Here is a full picture of the 30 jobs (or cost groups) currently running over budget:\n\n**Named jobs with a budget overrun (16 jobs)**\n\n| Job | Job Name | Project Manager | Status | Budget | Actual Cost | Over By |\n|---|---|---|---|---|---|---|\n| J-202549 | Service Upgrade Main | D. Nakamura | Complete | $295,841 | $395,857 | **$100,016** |\n| J-202519 | Retrofit Building B | D. Nakamura | Complete | $0 | $61,178 | **$61,178** |\n| J-202536 | New Build Building B | M. Tremblay | Complete | $0 | $52,388 | **$52,388** |\n| J-202517 | New Build Phase 1 | S. Whitfield | Complete | $103,979 | $149,452 | **$45,473** |\n| J-202545 | Expansion Main | R. Okafor | Complete | $0 | $36,201 | **$36,201** |\n| J-202523 | Fit-Out Main | M. Tremblay | Complete | $250,076 | $277,872 | **$27,796** |\n| J-202534 | Expansion Main | M. Tremblay | Complete | $150,100 | $168,161 | **$18,061** |\n| J-202551 | Fit-Out Phase 1 | S. Whitfield | Complete | $503,041 | $520,803 | **$17,762** |\n| J-202513 | \u0143ew Build Phase 2 | M. Tremblay | Complete | $288,731 | $306,182 | **$17,451** |\n| J-202524 | Fit-Out Main | R. Okafor | Complete | $67,341 | $79,964 | **$12,623** |\n| J-202541 | Retrofit Main | D. Nakamura | Complete | $57,870 | $65,058 | **$7,188** |\n| J-202527 | Retrofit Phase 1 | R. Okafor | Complete | $122,869 | $129,812 | **$6,942** |\n| J-202520 | Expansion Building A | D. Nakamura | Complete | $82,126 | $87,919 | **$5,793** |\n| J-202503 | R\u00e9tr\u00f4fit Phase 2 | D. Nakamura | Complete | $96,570 | $101,209 | **$4,639** |\n| J-202537 | Expansion Building B | M. Tremblay | Complete | $108,303 | $112,659 | **$4,356** |\n| J-202506 | R\u00e9tr\u00f4fit Building A | M. Tremblay | **Active** | $75,839 | $78,987 | **$3,148** |\n\n**14 orphan cost rows (no budget, no matching job record)**\n\nThe remaining 14 rows at the bottom of the results have no job name or budget \u2014 these are costs tied to job keys (53\u201371) that don't exist in the job dimension. This is a known data quality issue (DQ2): $16,883 of real cost cannot be attributed to any named job.\n\n---\n\n**Key observations:**\n\n- **J-202549 (Service Upgrade Main)** is by far the biggest overrun at **$100,016 over budget**, more than double the next largest.\n- **Three jobs (J-202519, J-202536, J-202545)** show a budget of $0, meaning they have real costs with no budget set at all (they are among the 3 jobs with no budget rows in the system). These should be flagged for a budget to be established.\n- **J-202506** is the only **Active** job currently over budget, so it still has time to course-correct.\n- Three jobs flagged as Complete have null budgets \u2014 costs incurred against jobs with no approved budget are a control risk worth investigating.",
+    "answer": "Here is what the data shows. There are **16 identifiable jobs** currently running over budget, plus a data quality footnote for the remaining rows.\n\n**The 16 named over-budget jobs, ranked by overage:**\n\n1. **J-202549 \u2013 Service Upgrade Main** (D. Nakamura, Complete) \u2014 $100,016.25 over budget. The largest single overage by far.\n2. **J-202519 \u2013 Retrofit Building B** (S. Whitfield, Complete) \u2014 $61,177.70 over. No budget was ever set for this job, so all spending counts as overrun.\n3. **J-202536 \u2013 New Build Building B** (M. Tremblay, Complete) \u2014 $52,388.06 over. Also had no budget set.\n4. **J-202517 \u2013 New Build Phase 1** (S. Whitfield, Complete) \u2014 $45,472.89 over.\n5. **J-202545 \u2013 Expansion Main** (R. Okafor, Complete) \u2014 $36,200.52 over. Also had no budget set.\n6. **J-202523 \u2013 Fit-Out Main** (M. Tremblay, Complete) \u2014 $27,796.08 over.\n7. **J-202534 \u2013 Expansion Main** (M. Tremblay, Complete) \u2014 $18,060.74 over.\n8. **J-202551 \u2013 Fit-Out Phase 1** (S. Whitfield, Complete) \u2014 $17,761.68 over.\n9. **J-202513 \u2013 N\u00ebw Build Phase 2** (M. Tremblay, Complete) \u2014 $17,451.23 over.\n10. **J-202524 \u2013 Fit-Out Main** (R. Okafor, Complete) \u2014 $12,622.90 over.\n11. **J-202541 \u2013 Retrofit Main** (D. Nakamura, Complete) \u2014 $7,187.96 over.\n12. **J-202527 \u2013 Retrofit Phase 1** (R. Okafor, Complete) \u2014 $6,942.26 over.\n13. **J-202520 \u2013 Expansion Building A** (D. Nakamura, Complete) \u2014 $5,792.75 over.\n14. **J-202503 \u2013 R\u00e9tofit Phase 2** (D. Nakamura, Complete) \u2014 $4,638.95 over.\n15. **J-202537 \u2013 Expansion Building B** (M. Tremblay, Complete) \u2014 $4,356.16 over.\n16. **J-202506 \u2013 R\u00e9tofit Building A** \u26a0\ufe0f (M. Tremblay, **Active**) \u2014 $3,147.82 over. This is the only Active job in the list, so the overrun could grow further as costs continue to be booked.\n\n**A few important caveats:**\n\n- **Jobs with no budget set (J-202519, J-202536, J-202545):** These three jobs have zero budget recorded. Whether to treat them as \"over budget\" or simply \"unbudgeted\" is a business judgement call \u2014 their entire actual cost appears as an overrun because there was nothing to compare against.\n- **14 unidentifiable rows (DQ2):** The results also show 14 rows with no job name or number. These represent cost transactions linked to job keys that don't exist in the job dimension \u2014 a known data quality defect. Their combined overage is real spend but cannot be attributed to any specific job.\n- **Approved change orders:** The model holds 7 approved change orders that are not baked into the budget figures. If those change orders were authorised to cover extra scope, the true overage for those specific jobs may be smaller than shown here.\n\nWould you like to break any of these down further, for example by cost type to see where the overruns are coming from?",
     "error": null,
     "tool_calls": [
       {
-        "sql": "\nWITH b AS (\n    SELECT JobKey, CAST(SUM(BudgetAmount) AS DECIMAL(18,2)) AS budget\n    FROM fact_job_budget\n    GROUP BY JobKey\n),\na AS (\n    SELECT JobKey, CAST(SUM(CostAmount) AS DECIMAL(18,2)) AS actual\n    FROM fact_job_cost\n    GROUP BY JobKey\n)\nSELECT\n    j.JobNumber,\n    j.JobName,\n    j.ProjectManager,\n    j.Status,\n    CAST(COALESCE(b.budget, 0) AS DECIMAL(18,2))                          AS budget,\n    CAST(COALESCE(a.actual, 0) AS DECIMAL(18,2))                          AS actual_cost,\n    CAST(COALESCE(a.actual, 0) - COALESCE(b.budget, 0) AS DECIMAL(18,2)) AS over_budget_by\nFROM b\nFULL OUTER JOIN a ON a.JobKey = b.JobKey\nLEFT JOIN dim_job j ON j.JobKey = COALESCE(b.JobKey, a.JobKey)\nWHERE COALESCE(a.actual, 0) - COALESCE(b.budget, 0) > 0\nORDER BY over_budget_by DESC\n",
-        "executed_sql": "\nWITH b AS (\n    SELECT JobKey, CAST(SUM(BudgetAmount) AS DECIMAL(18,2)) AS budget\n    FROM fact_job_budget\n    GROUP BY JobKey\n),\na AS (\n    SELECT JobKey, CAST(SUM(CostAmount) AS DECIMAL(18,2)) AS actual\n    FROM fact_job_cost\n    GROUP BY JobKey\n)\nSELECT\n    j.JobNumber,\n    j.JobName,\n    j.ProjectManager,\n    j.Status,\n    CAST(COALESCE(b.budget, 0) AS DECIMAL(18,2))                          AS budget,\n    CAST(COALESCE(a.actual, 0) AS DECIMAL(18,2))                          AS actual_cost,\n    CAST(COALESCE(a.actual, 0) - COALESCE(b.budget, 0) AS DECIMAL(18,2)) AS over_budget_by\nFROM b\nFULL OUTER JOIN a ON a.JobKey = b.JobKey\nLEFT JOIN dim_job j ON j.JobKey = COALESCE(b.JobKey, a.JobKey)\nWHERE COALESCE(a.actual, 0) - COALESCE(b.budget, 0) > 0\nORDER BY over_budget_by DESC\nLIMIT 500",
+        "sql": "\nWITH b AS (\n    SELECT JobKey, sum(BudgetAmount) AS budget\n    FROM fact_job_budget GROUP BY 1\n),\na AS (\n    SELECT JobKey, sum(CostAmount) AS actual\n    FROM fact_job_cost GROUP BY 1\n)\nSELECT\n    j.JobNumber,\n    j.JobName,\n    j.Status,\n    j.ProjectManager,\n    CAST(coalesce(b.budget, 0) AS DECIMAL(18,2)) AS budget,\n    CAST(coalesce(a.actual, 0) AS DECIMAL(18,2)) AS actual,\n    CAST(coalesce(a.actual, 0) - coalesce(b.budget, 0) AS DECIMAL(18,2)) AS variance\nFROM b\nFULL OUTER JOIN a ON a.JobKey = b.JobKey\nLEFT JOIN dim_job j ON j.JobKey = coalesce(b.JobKey, a.JobKey)\nWHERE coalesce(a.actual, 0) - coalesce(b.budget, 0) > 0\nORDER BY variance DESC\n",
+        "executed_sql": "\nWITH b AS (\n    SELECT JobKey, sum(BudgetAmount) AS budget\n    FROM fact_job_budget GROUP BY 1\n),\na AS (\n    SELECT JobKey, sum(CostAmount) AS actual\n    FROM fact_job_cost GROUP BY 1\n)\nSELECT\n    j.JobNumber,\n    j.JobName,\n    j.Status,\n    j.ProjectManager,\n    CAST(coalesce(b.budget, 0) AS DECIMAL(18,2)) AS budget,\n    CAST(coalesce(a.actual, 0) AS DECIMAL(18,2)) AS actual,\n    CAST(coalesce(a.actual, 0) - coalesce(b.budget, 0) AS DECIMAL(18,2)) AS variance\nFROM b\nFULL OUTER JOIN a ON a.JobKey = b.JobKey\nLEFT JOIN dim_job j ON j.JobKey = coalesce(b.JobKey, a.JobKey)\nWHERE coalesce(a.actual, 0) - coalesce(b.budget, 0) > 0\nORDER BY variance DESC\nLIMIT 500",
         "ok": true,
         "rejected": false,
         "clamped_from": null,
@@ -604,18 +694,18 @@
         "columns": [
           "JobNumber",
           "JobName",
-          "ProjectManager",
           "Status",
+          "ProjectManager",
           "budget",
-          "actual_cost",
-          "over_budget_by"
+          "actual",
+          "variance"
         ],
         "rows": [
           [
             "J-202549",
             "Service Upgrade Main",
-            "D. Nakamura",
             "Complete",
+            "D. Nakamura",
             {
               "__t": "decimal",
               "v": "295840.89"
@@ -632,8 +722,8 @@
           [
             "J-202519",
             "Retrofit Building B",
-            "D. Nakamura",
             "Complete",
+            "D. Nakamura",
             {
               "__t": "decimal",
               "v": "0.00"
@@ -650,8 +740,8 @@
           [
             "J-202536",
             "New Build Building B",
-            "M. Tremblay",
             "Complete",
+            "M. Tremblay",
             {
               "__t": "decimal",
               "v": "0.00"
@@ -668,8 +758,8 @@
           [
             "J-202517",
             "New Build Phase 1",
-            "S. Whitfield",
             "Complete",
+            "S. Whitfield",
             {
               "__t": "decimal",
               "v": "103979.49"
@@ -686,8 +776,8 @@
           [
             "J-202545",
             "Expansion Main",
-            "R. Okafor",
             "Complete",
+            "R. Okafor",
             {
               "__t": "decimal",
               "v": "0.00"
@@ -704,8 +794,8 @@
           [
             "J-202523",
             "Fit-Out Main",
-            "M. Tremblay",
             "Complete",
+            "M. Tremblay",
             {
               "__t": "decimal",
               "v": "250076.30"
@@ -722,8 +812,8 @@
           [
             "J-202534",
             "Expansion Main",
-            "M. Tremblay",
             "Complete",
+            "M. Tremblay",
             {
               "__t": "decimal",
               "v": "150099.89"
@@ -740,8 +830,8 @@
           [
             "J-202551",
             "Fit-Out Phase 1",
-            "S. Whitfield",
             "Complete",
+            "S. Whitfield",
             {
               "__t": "decimal",
               "v": "503041.19"
@@ -758,8 +848,8 @@
           [
             "J-202513",
             "N\u00e9w Build Phase 2",
-            "M. Tremblay",
             "Complete",
+            "M. Tremblay",
             {
               "__t": "decimal",
               "v": "288730.53"
@@ -776,8 +866,8 @@
           [
             "J-202524",
             "Fit-Out Main",
-            "R. Okafor",
             "Complete",
+            "R. Okafor",
             {
               "__t": "decimal",
               "v": "67341.47"
@@ -794,8 +884,8 @@
           [
             "J-202541",
             "Retrofit Main",
-            "D. Nakamura",
             "Complete",
+            "D. Nakamura",
             {
               "__t": "decimal",
               "v": "57870.33"
@@ -812,8 +902,8 @@
           [
             "J-202527",
             "Retrofit Phase 1",
-            "R. Okafor",
             "Complete",
+            "R. Okafor",
             {
               "__t": "decimal",
               "v": "122869.28"
@@ -830,8 +920,8 @@
           [
             "J-202520",
             "Expansion Building A",
-            "D. Nakamura",
             "Complete",
+            "D. Nakamura",
             {
               "__t": "decimal",
               "v": "82125.92"
@@ -848,8 +938,8 @@
           [
             "J-202503",
             "R\u00e9trofit Phase 2",
-            "D. Nakamura",
             "Complete",
+            "D. Nakamura",
             {
               "__t": "decimal",
               "v": "96570.18"
@@ -866,8 +956,8 @@
           [
             "J-202537",
             "Expansion Building B",
-            "M. Tremblay",
             "Complete",
+            "M. Tremblay",
             {
               "__t": "decimal",
               "v": "108302.64"
@@ -884,8 +974,8 @@
           [
             "J-202506",
             "R\u00e9trofit Building A",
-            "M. Tremblay",
             "Active",
+            "M. Tremblay",
             {
               "__t": "decimal",
               "v": "75839.41"
@@ -1159,12 +1249,12 @@
   {
     "id": "jobs_finished_late",
     "question": "Which jobs finished late?",
-    "answer": "**33 of the 52 jobs finished after their scheduled end date.** Here's what the data shows:\n\n**The worst overruns (40+ days late):**\n- **J-202509** \u2013 R\u00e9tr\u043efit Building B (Cardinal Real Estate, R. Okafor, HVAC) \u2014 44 days late\n- **J-202524** \u2013 Fit-Out Main (Cardinal Real Estate, R. Okafor, HVAC) \u2014 44 days late\n- **J-202542** \u2013 Fit-Out Main (Ouellette Manufacturing, M. Tremblay, Electrical) \u2014 44 days late\n- **J-202534** \u2013 Expansion Main (Rivard Industrial, M. Tremblay, HVAC) \u2014 43 days late\n- **J-202517** \u2013 New Build Phase 1 (Rivard Ind., S. Whitfield, Mechanical) \u2014 43 days late\n- Several more in the 40\u201343 day range\n\n**The smallest overruns:**\n- **J-202503** \u2013 R\u00e9tr\u043efit Phase 2 (Cardinal Real Estate, D. Nakamura) \u2014 only 2 days late\n- **J-202504** \u2013 R\u00e9tr\u043efit Building B (Perrault Group, M. Tremblay) \u2014 3 days late\n\n**A few things to note:**\n\n- **4 jobs were excluded** from this analysis because they are marked \"Complete\" but have a NULL Actual End Date (a known data quality issue \u2014 `HasDateDefect = TRUE` on jobs J-16, J-21, J-25, J-37). These cannot be assessed for lateness without a valid actual end date.\n- **4 Active jobs** naturally have no Actual End Date yet and are excluded as well \u2014 it's too early to call them late or on time.\n- The remaining 15 jobs (of the 44 with valid dates) finished on or before their scheduled end date.\n\nWould you like to drill into lateness by project manager, client, or job type?",
+    "answer": "33 out of the 52 jobs in the system finished after their scheduled end date. All of them have a Status of \"Complete.\" Here is what the data shows:\n\n**Scale of lateness:** The delays range from just 2 days (J-202503, R\u00e9tofit Phase 2 for Cardinal Real Estate) up to 44 days (three jobs: J-202509, J-202524, and J-202542). The majority of late jobs overran by more than three weeks.\n\n**Top 5 latest finishers (by days overrun):**\n1. **J-202509** \u2013 R\u00e9tofit Building B (Cardinal Real Estate, R. Okafor) \u2014 44 days late\n2. **J-202524** \u2013 Fit-Out Main (Cardinal Real Estate, R. Okafor) \u2014 44 days late\n3. **J-202542** \u2013 Fit-Out Main (Ouellette Manufacturing, M. Tremblay) \u2014 44 days late\n4. **J-202534** \u2013 Expansion Main (Rivard Industrial, M. Tremblay) \u2014 43 days late\n5. **J-202517** \u2013 New Build Phase 1 (Rivard Ind., S. Whitfield) \u2014 43 days late\n\n**What couldn't be assessed:** 8 jobs were excluded from this analysis because they have no ActualEndDate recorded. Four of those are the Active jobs still in progress \u2014 that's expected. The other four are jobs flagged with a known data quality issue (DQ4): they are marked \"Complete\" in the system but have a NULL ActualEndDate, which makes it impossible to determine whether they ran over. Those are job keys 16, 21, 25, and 37. If any of those finished late, they are not reflected in this count.\n\nWould you like to break this down further \u2014 for example, by project manager, job type, or client?",
     "error": null,
     "tool_calls": [
       {
-        "sql": "\nSELECT\n    JobNumber,\n    JobName,\n    ClientName,\n    ProjectManager,\n    JobType,\n    CAST(StartDate AS DATE)        AS start_date,\n    CAST(ScheduledEndDate AS DATE) AS scheduled_end,\n    CAST(ActualEndDate AS DATE)    AS actual_end,\n    CAST(ActualEndDate AS DATE) - CAST(ScheduledEndDate AS DATE) AS days_late\nFROM dim_job\nWHERE ActualEndDate > ScheduledEndDate\n  AND HasDateDefect = FALSE\nORDER BY days_late DESC\n",
-        "executed_sql": "\nSELECT\n    JobNumber,\n    JobName,\n    ClientName,\n    ProjectManager,\n    JobType,\n    CAST(StartDate AS DATE)        AS start_date,\n    CAST(ScheduledEndDate AS DATE) AS scheduled_end,\n    CAST(ActualEndDate AS DATE)    AS actual_end,\n    CAST(ActualEndDate AS DATE) - CAST(ScheduledEndDate AS DATE) AS days_late\nFROM dim_job\nWHERE ActualEndDate > ScheduledEndDate\n  AND HasDateDefect = FALSE\nORDER BY days_late DESC\nLIMIT 500",
+        "sql": "\nSELECT\n    JobNumber,\n    JobName,\n    ClientName,\n    ProjectManager,\n    JobType,\n    Status,\n    CAST(StartDate AS DATE)        AS start_date,\n    CAST(ScheduledEndDate AS DATE) AS scheduled_end,\n    CAST(ActualEndDate AS DATE)    AS actual_end,\n    CAST(ActualEndDate AS DATE) - CAST(ScheduledEndDate AS DATE) AS days_late\nFROM dim_job\nWHERE ActualEndDate > ScheduledEndDate\nORDER BY days_late DESC\n",
+        "executed_sql": "\nSELECT\n    JobNumber,\n    JobName,\n    ClientName,\n    ProjectManager,\n    JobType,\n    Status,\n    CAST(StartDate AS DATE)        AS start_date,\n    CAST(ScheduledEndDate AS DATE) AS scheduled_end,\n    CAST(ActualEndDate AS DATE)    AS actual_end,\n    CAST(ActualEndDate AS DATE) - CAST(ScheduledEndDate AS DATE) AS days_late\nFROM dim_job\nWHERE ActualEndDate > ScheduledEndDate\nORDER BY days_late DESC\nLIMIT 500",
         "ok": true,
         "rejected": false,
         "clamped_from": null,
@@ -1175,6 +1265,7 @@
           "ClientName",
           "ProjectManager",
           "JobType",
+          "Status",
           "start_date",
           "scheduled_end",
           "actual_end",
@@ -1187,6 +1278,7 @@
             "Cardinal Real Estate",
             "R. Okafor",
             "HVAC",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-05-23"
@@ -1207,6 +1299,7 @@
             "Cardinal Real Estate",
             "R. Okafor",
             "HVAC",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-07-14"
@@ -1227,6 +1320,7 @@
             "Ouellette Manufacturing",
             "M. Tremblay",
             "Electrical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-05-08"
@@ -1247,6 +1341,7 @@
             "Rivard Industrial",
             "M. Tremblay",
             "HVAC",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-12-21"
@@ -1267,6 +1362,7 @@
             "Rivard Ind.",
             "S. Whitfield",
             "Mechanical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-12-21"
@@ -1287,6 +1383,7 @@
             "Steelhead Logistics",
             "S. Whitfield",
             "HVAC",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-02-28"
@@ -1307,6 +1404,7 @@
             "Northgate Properties",
             "S. Whitfield",
             "Mechanical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-08-19"
@@ -1327,6 +1425,7 @@
             "Northgate Properties",
             "S. Whitfield",
             "Mechanical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-03-19"
@@ -1347,6 +1446,7 @@
             "Ouellette Manufacturing",
             "M. Tremblay",
             "Mechanical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-07-15"
@@ -1367,6 +1467,7 @@
             "Perrault Group",
             "D. Nakamura",
             "Electrical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-11-20"
@@ -1387,6 +1488,7 @@
             "Beauchemin Construction",
             "D. Nakamura",
             "Mechanical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-02-09"
@@ -1407,6 +1509,7 @@
             "Perrault Group",
             "M. Tremblay",
             "Electrical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-03-30"
@@ -1427,6 +1530,7 @@
             "Ouellette Manufacturing",
             "M. Tremblay",
             "HVAC",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-08-20"
@@ -1447,6 +1551,7 @@
             "Beauchemin Construction",
             "S. Whitfield",
             "Mechanical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-05-17"
@@ -1467,6 +1572,7 @@
             "ACME Corp",
             "M. Tremblay",
             "HVAC",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-10-30"
@@ -1487,6 +1593,7 @@
             "Perrault Group",
             "S. Whitfield",
             "Electrical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-12-23"
@@ -1507,6 +1614,7 @@
             "Halcyon Developments",
             "S. Whitfield",
             "HVAC",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-05-20"
@@ -1527,6 +1635,7 @@
             "Rivard Industrial",
             "D. Nakamura",
             "Mechanical",
+            "Complete",
             {
               "__t": "date",
               "v": "2024-12-29"
@@ -1547,6 +1656,7 @@
             "Rivard Ind.",
             "D. Nakamura",
             "Electrical",
+            "Complete",
             {
               "__t": "date",
               "v": "2024-12-20"
@@ -1567,6 +1677,7 @@
             "Meridian Foods",
             "S. Whitfield",
             "Electrical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-10-25"
@@ -1587,6 +1698,7 @@
             "Ouellette Manufacturing",
             "D. Nakamura",
             "Electrical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-08-10"
@@ -1607,6 +1719,7 @@
             "Beauchemin Construction",
             "R. Okafor",
             "HVAC",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-06-04"
@@ -1627,6 +1740,7 @@
             "Meridian Foods",
             "D. Nakamura",
             "HVAC",
+            "Complete",
             {
               "__t": "date",
               "v": "2024-10-05"
@@ -1647,6 +1761,7 @@
             "Meridian Foods",
             "D. Nakamura",
             "HVAC",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-08-27"
@@ -1667,6 +1782,7 @@
             "Meridian Foods",
             "R. Okafor",
             "HVAC",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-03-23"
@@ -1687,6 +1803,7 @@
             "ACME Corp",
             "R. Okafor",
             "Mechanical",
+            "Complete",
             {
               "__t": "date",
               "v": "2026-02-11"
@@ -1707,6 +1824,7 @@
             "ACME Corp",
             "M. Tremblay",
             "HVAC",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-05-27"
@@ -1727,6 +1845,7 @@
             "Halcyon Developments",
             "M. Tremblay",
             "Mechanical",
+            "Complete",
             {
               "__t": "date",
               "v": "2026-01-26"
@@ -1747,6 +1866,7 @@
             "Beauchemin Construction",
             "S. Whitfield",
             "Electrical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-10-25"
@@ -1767,6 +1887,7 @@
             "Beauchemin Construction",
             "M. Tremblay",
             "Electrical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-04-20"
@@ -1787,6 +1908,7 @@
             "Halcyon Developments",
             "M. Tremblay",
             "Mechanical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-08-23"
@@ -1807,6 +1929,7 @@
             "Perrault Group",
             "M. Tremblay",
             "Electrical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-07-21"
@@ -1827,6 +1950,7 @@
             "Cardinal Real Estate",
             "D. Nakamura",
             "Electrical",
+            "Complete",
             {
               "__t": "date",
               "v": "2025-07-22"
@@ -1849,14 +1973,14 @@
   {
     "id": "cost_by_region",
     "question": "What is our cost by region?",
-    "answer": "This question cannot be answered from the available data, and here is exactly why.\n\n**Region exists in only one place in this model: `dim_employee.Region`.** It describes the *employee*, not the job or the work. There is no Region column on `dim_job`, no region dimension, and no other table that carries a region attribute. That means there is no path from a cost transaction, a budget row, a change order, or a job back to a region. Cost simply cannot be attributed to a region with this data.\n\n**What would be needed to answer it properly:** A Region column on the job dimension (`dim_job`), or a separate region dimension that jobs have a foreign key to. Without that, region is purely an employee attribute and cannot describe where work happened or where revenue was earned.\n\n---\n\n**There is a narrower question I *can* answer, if you'd like to ask it separately:**\n\n> \"What is labour cost, broken down by the home region of the employee who booked it?\"\n\nI want to be upfront about its significant limits before you decide whether it's useful:\n\n- It would cover only **4,637 of the 10,365 cost rows** \u2014 specifically the Labour rows that carry an EmployeeKey. The other 5,728 rows (all Material, Subcontractor, and Equipment costs, plus 40 Labour rows) have no employee link and would be excluded entirely.\n- It attributes cost to **where the employee is based**, not where the work actually took place.\n- It is **labour cost by employee home region**, not \"cost by region\" in any business-meaningful sense.\n\nWould you like me to run that instead, with those caveats in mind?",
+    "answer": "This question cannot be answered from the available data, and here is exactly why.\n\n**What is missing:** Region exists in only one place in this model \u2014 `dim_employee.Region`. It describes the *employee*, not the job or the cost transaction. `dim_job` has no region column, and no other table carries one. There is no path from a job, a budget row, or a change order to a region. Cost cannot be attributed to a region.\n\n**What would be needed:** A Region column on `dim_job`, or a separate region dimension that jobs have a foreign key to. Without that, region is purely an employee attribute and cannot be used to slice total job cost.\n\n---\n\n**What I *can* offer instead \u2014 but only if you choose to ask it:**\n\n\"Labour cost by the home region of the employee who booked it.\" I want to be upfront about its limits before you decide:\n\n- It would cover only **4,637 of 10,365 cost rows** \u2014 the Labour rows that carry an `EmployeeKey`. All material, subcontractor, and equipment costs are excluded.\n- It attributes cost to *where the employee is based*, not where the work physically happened \u2014 those may not be the same thing.\n- It is therefore a partial view of labour spend, not a picture of total cost by region.\n\nIf you'd like that narrower analysis with those caveats clearly stated, just ask and I'll run it.",
     "error": null,
     "tool_calls": []
   },
   {
     "id": "profit_by_job",
     "question": "Which jobs were the most profitable?",
-    "answer": "Here are all 52 jobs ranked by gross margin (contract value minus actual cost), from most to least profitable. A few important caveats up front:\n\n**What this figure is \u2014 and isn't:**\n- The \"margin\" shown is **contract value less actual cost to date**. This model holds no revenue, no invoices, and no billing data, so this is **not recognised accounting profit**.\n- It **excludes overhead** \u2014 fact_job_cost contains direct job costs only.\n- The figures are **unreliable for the 4 Active jobs** (J-202532, J-202514, J-202529, J-202506), where the full contract value sits against only the costs incurred so far, which flatters the margin.\n- There are **7 approved change orders totalling 71,676.06** in the data that are not reflected in the contract values shown. The jobs they belong to have understated contract values, and therefore understated margins.\n\n**Top 10 most profitable jobs:**\n\n1. **J-202511 \u2013 N\u00e9w Build Phase 2** (Complete): contract 379,000 | cost 203,013 | margin **175,987**\n2. **J-202512 \u2013 Expansion Phas\u00e9 1** (Complete): contract 420,000 | cost 278,646 | margin **141,354**\n3. **J-202530 \u2013 Expansion Building A** (Complete): contract 387,000 | cost 258,534 | margin **128,466**\n4. **J-202510 \u2013 R\u00e9trofit Building B** (Complete): contract 334,000 | cost 231,251 | margin **102,749**\n5. **J-202505 \u2013 Fit-Out Phas\u00e9 2** (Complete): contract 430,000 | cost 337,662 | margin **92,338**\n6. **J-202521 \u2013 Expansion Phase 2** (Complete): contract 316,000 | cost 225,289 | margin **90,711**\n7. **J-202526 \u2013 Retrofit Phase 1** (Complete): contract 250,000 | cost 161,652 | margin **88,348**\n8. **J-202532 \u2013 Retrofit Main** (**Active** \u26a0\ufe0f): contract 271,000 | cost 190,768 | margin **80,232**\n9. **J-202547 \u2013 Fit-Out Building B** (Complete): contract 185,000 | cost 116,423 | margin **68,577**\n10. **J-202551 \u2013 Fit-Out Phase 1** (Complete): contract 585,000 | cost 520,803 | margin **64,197**\n\n**Two jobs ran over contract value:**\n- **J-202517 \u2013 New Build Phase 1**: over by **24,452**\n- **J-202549 \u2013 Service Upgrade Main**: over by **27,857**\n\nAnd **J-202524 \u2013 Fit-Out Main** essentially broke even, with a margin of just **36**.\n\nWould you like to drill into any specific job, cost type breakdown, or look at how the approved change orders affect these margins?",
+    "answer": "Here are all 52 jobs ranked by contract value less actual cost, from most to least \"profitable.\" A few important caveats before diving in:\n\n**What this figure actually is:** It is contract value minus actual cost booked to date. This model holds no revenue, no invoices, and no billing records \u2014 so this is **not recognised profit or revenue**. It is the closest defensible margin measure available in the data.\n\n**Four additional limitations to keep in mind:**\n\n1. **Active jobs are overstated.** Four jobs (J-202532, J-202514, J-202529, J-202506) are still Active, meaning the full contract value sits against only the costs incurred so far. Their margins are likely flattering.\n\n2. **Approved change orders are excluded.** There are 7 approved change orders worth a combined 71,676.06 that are not reflected in ContractValue, so some jobs' margins are understated by that amount.\n\n3. **Overhead is excluded.** fact_job_cost holds direct job costs only.\n\n4. **A small double-count in cost:** Data quality issue DQ1 means the total actual cost is overstated by 347.30 due to two duplicate cost rows.\n\n---\n\n**Top 10 by contract value less actual cost:**\n\n1. **J-202511** \u2013 N\u00e9w Build Phase 2 (Complete): margin of **175,987.48**\n2. **J-202512** \u2013 Expansion Phas\u00e9 1 (Complete): **141,354.35**\n3. **J-202530** \u2013 Expansion Building A (Complete): **128,465.77**\n4. **J-202510** \u2013 R\u00e9trofit Building B (Complete): **102,748.69**\n5. **J-202505** \u2013 Fit-Out Phas\u00e9 2 (Complete): **92,338.39**\n6. **J-202521** \u2013 Expansion Phase 2 (Complete): **90,710.73**\n7. **J-202526** \u2013 Retrofit Phase 1 (Complete): **88,348.01**\n8. **J-202532** \u2013 Retrofit Main (**Active** \u2013 treat with caution): **80,232.37**\n9. **J-202547** \u2013 Fit-Out Building B (Complete): **68,577.06**\n10. **J-202551** \u2013 Fit-Out Phase 1 (Complete): **64,197.13**\n\n**At the bottom**, two jobs actually ran over their contract value:\n- **J-202517** \u2013 New Build Phase 1: **\u201324,452.38** (actual cost exceeded contract by 24,452.38)\n- **J-202549** \u2013 Service Upgrade Main: **\u201327,857.14** (the worst performer, over contract by 27,857.14)\n\nWould you like to drill into any specific job or look at this breakdown by cost type or project manager?",
     "error": null,
     "tool_calls": [
       {
@@ -2767,350 +2891,8 @@
   {
     "id": "biggest_jobs",
     "question": "Show me our biggest jobs.",
-    "answer": "Here are your 20 largest jobs, ranked by contract value:\n\n**Top 5 standouts:**\n\n1. **J-202551 \u2013 Fit-Out Phase 1** (Beauchemin Construction, Mechanical) is the biggest by far at a $585,000 contract, with $520,803 spent \u2014 the tightest margin in the top group. Managed by S. Whitfield.\n\n2. **J-202505 \u2013 Fit-Out Phase 2** (Beauchemin Construction, Mechanical) at $430,000 contract and $337,662 actual cost. D. Nakamura.\n\n3. **J-202512 \u2013 Expansion Phase 1** (Meridian Foods, Electrical) at $420,000 contract and $278,646 actual cost. M. Tremblay.\n\n4. **J-202530 \u2013 Expansion Building A** (ACME Corp, Electrical) at $387,000 contract and $258,534 actual cost.\n\n5. **J-202511 \u2013 New Build Phase 2** (Northgate Properties, HVAC) at $379,000 contract and $203,013 actual cost.\n\n**A few things to flag:**\n\n- **J-202549 \u2013 Service Upgrade Main** (Ouellette Manufacturing, #6 by contract at $368,000) is already **over its contract value** with $395,857 in actual costs recorded \u2014 worth investigating.\n- **J-202532 \u2013 Retrofit Main** is the only **Active** job in this top 20 (contract $271,000, $190,768 spent so far), so its final cost picture is still developing.\n- Contract value does **not** include any approved change orders, and this model holds no revenue or billing data, so these figures should be treated as a cost-management view, not a P&L.\n\nWould you like to drill into any of these jobs \u2014 for example, a cost type breakdown, budget vs. actual, or change order status?",
+    "answer": "Great question \u2014 but \"biggest\" can mean four genuinely different things here, and the rankings differ depending on which you pick:\n\n1. **By contract value** \u2014 the dollar value each job was contracted for, as recorded on the job record.\n\n2. **By actual cost booked to date** \u2014 the total cost transactions posted against each job, regardless of what was contracted.\n\n3. **By budget** \u2014 the total budgeted cost allocated to each job across all cost types.\n\n4. **By duration** \u2014 how long each job ran (or is planned to run), from start date to actual or scheduled end date.\n\nThese don't produce the same ranking. For example, the job that sits at the top by contract value, budget, or cost is not the same job that ranks first by duration, and the order of jobs in second and third place shifts as well.\n\nWhich of these did you have in mind?",
     "error": null,
-    "tool_calls": [
-      {
-        "sql": "\nWITH actual AS (\n    SELECT JobKey, CAST(sum(CostAmount) AS DECIMAL(18,2)) AS actual_cost\n    FROM fact_job_cost GROUP BY 1\n)\nSELECT\n    j.JobNumber,\n    j.JobName,\n    j.ClientName,\n    j.JobType,\n    j.Status,\n    j.ProjectManager,\n    CAST(j.ContractValue AS DECIMAL(18,2))      AS contract_value,\n    CAST(coalesce(a.actual_cost, 0) AS DECIMAL(18,2)) AS actual_cost\nFROM dim_job j\nLEFT JOIN actual a ON a.JobKey = j.JobKey\nORDER BY j.ContractValue DESC\nLIMIT 20\n",
-        "executed_sql": "\nWITH actual AS (\n    SELECT JobKey, CAST(sum(CostAmount) AS DECIMAL(18,2)) AS actual_cost\n    FROM fact_job_cost GROUP BY 1\n)\nSELECT\n    j.JobNumber,\n    j.JobName,\n    j.ClientName,\n    j.JobType,\n    j.Status,\n    j.ProjectManager,\n    CAST(j.ContractValue AS DECIMAL(18,2))      AS contract_value,\n    CAST(coalesce(a.actual_cost, 0) AS DECIMAL(18,2)) AS actual_cost\nFROM dim_job j\nLEFT JOIN actual a ON a.JobKey = j.JobKey\nORDER BY j.ContractValue DESC\nLIMIT 20\n",
-        "ok": true,
-        "rejected": false,
-        "clamped_from": null,
-        "truncated": false,
-        "columns": [
-          "JobNumber",
-          "JobName",
-          "ClientName",
-          "JobType",
-          "Status",
-          "ProjectManager",
-          "contract_value",
-          "actual_cost"
-        ],
-        "rows": [
-          [
-            "J-202551",
-            "Fit-Out Phase 1",
-            "Beauchemin Construction",
-            "Mechanical",
-            "Complete",
-            "S. Whitfield",
-            {
-              "__t": "decimal",
-              "v": "585000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "520802.87"
-            }
-          ],
-          [
-            "J-202505",
-            "Fit-Out Phas\u00e9 2",
-            "Beauchemin Construction",
-            "Mechanical",
-            "Complete",
-            "D. Nakamura",
-            {
-              "__t": "decimal",
-              "v": "430000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "337661.61"
-            }
-          ],
-          [
-            "J-202512",
-            "Expansion Phas\u00e9 1",
-            "Meridian Foods",
-            "Electrical",
-            "Complete",
-            "M. Tremblay",
-            {
-              "__t": "decimal",
-              "v": "420000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "278645.65"
-            }
-          ],
-          [
-            "J-202530",
-            "Expansion Building A",
-            "ACME Corp",
-            "Electrical",
-            "Complete",
-            "R. Okafor",
-            {
-              "__t": "decimal",
-              "v": "387000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "258534.23"
-            }
-          ],
-          [
-            "J-202511",
-            "N\u00e9w Build Phase 2",
-            "Northgate Properties",
-            "HVAC",
-            "Complete",
-            "D. Nakamura",
-            {
-              "__t": "decimal",
-              "v": "379000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "203012.52"
-            }
-          ],
-          [
-            "J-202549",
-            "Service Upgrade Main",
-            "Ouellette Manufacturing",
-            "Mechanical",
-            "Complete",
-            "D. Nakamura",
-            {
-              "__t": "decimal",
-              "v": "368000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "395857.14"
-            }
-          ],
-          [
-            "J-202513",
-            "N\u00e9w Build Phase 2",
-            "Ouellette Manufacturing",
-            "HVAC",
-            "Complete",
-            "M. Tremblay",
-            {
-              "__t": "decimal",
-              "v": "353000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "306181.76"
-            }
-          ],
-          [
-            "J-202510",
-            "R\u00e9trofit Building B",
-            "Halcyon Developments",
-            "Mechanical",
-            "Complete",
-            "M. Tremblay",
-            {
-              "__t": "decimal",
-              "v": "334000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "231251.31"
-            }
-          ],
-          [
-            "J-202521",
-            "Expansion Phase 2",
-            "Meridian Foods",
-            "Mechanical",
-            "Complete",
-            "R. Okafor",
-            {
-              "__t": "decimal",
-              "v": "316000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "225289.27"
-            }
-          ],
-          [
-            "J-202523",
-            "Fit-Out Main",
-            "Cardinal Real Estate",
-            "Electrical",
-            "Complete",
-            "M. Tremblay",
-            {
-              "__t": "decimal",
-              "v": "302000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "277872.38"
-            }
-          ],
-          [
-            "J-202528",
-            "New Build Main",
-            "Halcyon Developments",
-            "HVAC",
-            "Complete",
-            "S. Whitfield",
-            {
-              "__t": "decimal",
-              "v": "284000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "230464.54"
-            }
-          ],
-          [
-            "J-202532",
-            "Retrofit Main",
-            "Ouellette Manufacturing",
-            "Electrical",
-            "Active",
-            "D. Nakamura",
-            {
-              "__t": "decimal",
-              "v": "271000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "190767.63"
-            }
-          ],
-          [
-            "J-202526",
-            "Retrofit Phase 1",
-            "ACME Corp",
-            "Mechanical",
-            "Complete",
-            "R. Okafor",
-            {
-              "__t": "decimal",
-              "v": "250000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "161651.99"
-            }
-          ],
-          [
-            "J-202515",
-            "R\u00e9trofit Phase 2",
-            "Steelhead Logistics",
-            "HVAC",
-            "Complete",
-            "S. Whitfield",
-            {
-              "__t": "decimal",
-              "v": "232000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "168884.67"
-            }
-          ],
-          [
-            "J-202542",
-            "Fit-Out Main",
-            "Ouellette Manufacturing",
-            "Electrical",
-            "Complete",
-            "M. Tremblay",
-            {
-              "__t": "decimal",
-              "v": "231000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "184648.59"
-            }
-          ],
-          [
-            "J-202538",
-            "Expansion Building A",
-            "Perrault Group",
-            "Electrical",
-            "Complete",
-            "D. Nakamura",
-            {
-              "__t": "decimal",
-              "v": "207000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "153006.46"
-            }
-          ],
-          [
-            "J-202546",
-            "Service Upgrade Main",
-            "Meridian Foods",
-            "Electrical",
-            "Complete",
-            "S. Whitfield",
-            {
-              "__t": "decimal",
-              "v": "199000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "147705.76"
-            }
-          ],
-          [
-            "J-202501",
-            "R\u00e9trofit Phase 2",
-            "Rivard Ind.",
-            "HVAC",
-            "Complete",
-            "M. Tremblay",
-            {
-              "__t": "decimal",
-              "v": "193000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "144699.36"
-            }
-          ],
-          [
-            "J-202535",
-            "Retrofit Building A",
-            "Rivard Industrial",
-            "Electrical",
-            "Complete",
-            "M. Tremblay",
-            {
-              "__t": "decimal",
-              "v": "192000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "129704.82"
-            }
-          ],
-          [
-            "J-202533",
-            "Fit-Out Building B",
-            "Meridian Foods",
-            "HVAC",
-            "Complete",
-            "R. Okafor",
-            {
-              "__t": "decimal",
-              "v": "188000.00"
-            },
-            {
-              "__t": "decimal",
-              "v": "147631.95"
-            }
-          ]
-        ],
-        "error": null
-      }
-    ]
+    "tool_calls": []
   }
 ]
