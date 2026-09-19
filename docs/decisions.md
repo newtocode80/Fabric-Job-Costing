@@ -496,3 +496,29 @@ is not asking.
 | 60 | Ambiguity is **declared in model.yaml**, not left to the model to notice. | Twice now an eval has encoded a rule the prompt never stated. Declaring it is the pattern that fixed `profit_by_job`. |
 | 61 | The declaration carries **evidence that the readings disagree**. | If they all gave the same answer the question would not be ambiguous. The evidence was measured, not assumed. |
 | 62 | The eval checks the answer names at least two readings, not just that it contains a "?". | A trailing "would you like more?" satisfies a question mark. It does not satisfy asking which was meant. |
+
+## Final run: 14/15
+
+`biggest_jobs` passes with **zero tool calls** — it names the four readings, says
+they disagree, and asks which is meant, stating no figures at all. Declaring the
+ambiguity in `model.yaml` was the fix; three rounds of sharpening rule 5 were not,
+because rule 5 only applies once the model has decided a question is ambiguous.
+
+`labour_cost_total` cleared: the fabricated `346.65` is gone.
+
+### The remaining failure is not a defect
+
+`approved_change_order_value` fails on `19`, the sum of the cited `11` and `8`. The
+answer is correct; the flag is the conservative rule working as designed. Left
+failing rather than suppressed, and explained in the README, because a green board
+that hides the trade-off is worth less than an amber one that shows it.
+
+| # | Decision | Why |
+|---|---|---|
+| 63 | The eval set ships at 14/15, not tuned to 15/15. | The last row documents a real design trade-off. Silencing it would remove the evidence that the trade exists. |
+
+## Build complete
+
+All six milestones delivered. 212 tests. The eval set runs against the live model
+and replays offline. Every design decision that was not specified is in this file,
+63 of them, with the reasoning and — where it applies — the failure that caused it.
